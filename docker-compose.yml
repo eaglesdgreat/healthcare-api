@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  ms-auth-api:
+    container_name: ms-auth-api
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ms-auth-api.rule=PathPrefix(`/auth`)"
+    user: root
+    build:
+      context: .
+      target: base # Targets the first stage of the Dockerfile for dev
+    volumes:
+      - ./:/app
+      # The "Volume Trick": prevents local node_modules from overwriting container ones
+      - /app/node_modules
+    ports:
+      - 5501:5501
+    env_file:
+      - ./.env
+    links:
+      - ms-auth-db
+    environment:
+      - NODE_ENV=dev
+      - PORT=5501
+    # Using your wait-for pattern to ensure DB is ready before Nest starts
+    command: >
+      sh -c "./shell/wait-for.sh ms-auth-db:3306 -- sh ./shell/start-dev.sh"
+
+  ms-auth-db:
+    container_name: ms-auth-db
+    image: mysql:8.0 # Recommended over 5.7 for modern NestJS/TypeORM features
+    ports:
+      - 5306:3306
+    expose:
+      - 3306
+    env_file:
+      - ./.env
+    volumes:
+      - ms-auth-db_vol:/var/lib/mysql
+    restart: always
+
+volumes:
+  ms-auth-db_vol:
