@@ -40,14 +40,14 @@ add: install-package-in-container build
 
 .PHONY: install-package-in-container
 install-package-in-container:
-	docker-compose -p ${project} exec ${service} npm install -S ${package}
+	docker-compose -p ${project} exec ${service} pnpm add ${package}
 
 .PHONY: add-dev
 add-dev: install-dev-package-in-container build
 
 .PHONY: install-dev-package-in-container
 install-dev-package-in-container: start
-	docker-compose -p ${project} exec ${service} npm install -D ${package}
+	docker-compose -p ${project} exec ${service} pnpm add -D ${package}
 
 .PHONY: migration-create
 migration-create: start
@@ -76,15 +76,15 @@ test: start test-exec
 
 .PHONY: test-exec
 test-exec:
-	docker-compose -p ${project} exec ${service} npm run test -- --exit
+	docker-compose -p ${project} exec ${service} pnpm test -- --exit
 
 .PHONY: lint-fix
 lint-fix: start
-	docker-compose -p ${project} exec ${service} npm run lint:fix
+	docker-compose -p ${project} exec ${service} pnpm lint:fix
 
 .PHONY: test-cov
 test-cov:
-	docker-compose -p ${project} exec ${service} npm run test-cov
+	docker-compose -p ${project} exec ${service} pnpm test-cov
 
 .PHONY: commit-hash
 commit-hash:

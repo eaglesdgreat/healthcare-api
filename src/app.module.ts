@@ -11,13 +11,16 @@ import { ConfigModule } from '@nestjs/config';
     }),
     TypeOrmModule.forRoot({
       type: 'mysql',
-      host: process.env.DATABASE_HOST || 'localhost',
-      port: parseInt(process.env.DATABASE_PORT as string) || 3306,
-      username: process.env.DATABASE_USER || 'root',
-      password: process.env.DATABASE_PASSWORD || 'password',
-      database: process.env.DATABASE_NAME || 'healthcare_db',
-      autoLoadEntities: true, // Automatically finds your @Entity() files
-      synchronize: true, // Set to false in production!
+      host: process.env.MYSQL_HOST || 'localhost',
+      port: parseInt(process.env.MYSQL_PORT as string) || 3306,
+      username: process.env.MYSQL_USER || 'root',
+      password:
+        process.env.MYSQL_PASSWORD ||
+        process.env.MYSQL_ROOT_PASSWORD ||
+        'password',
+      database: process.env.MYSQL_DATABASE || 'healthcare_db',
+      entities: [__dirname + '/**/*.entity{.ts,.js}'],
+      synchronize: false, // Set to false in production!
     }),
   ],
   controllers: [AppController],
