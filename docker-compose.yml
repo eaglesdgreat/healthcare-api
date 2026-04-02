@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   ms-auth-api:
     container_name: ms-auth-api

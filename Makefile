@@ -1,7 +1,7 @@
 default: start
 
 project:=healthcare
-service:=ms-auth-api
+service:=ms-auth
 NODE_ENV?=dev
 COMMIT_HASH = $(shell git rev-parse --verify HEAD)
 
@@ -18,7 +18,7 @@ restart: stop start
 
 .PHONY: logs
 logs:
-	docker-compose -p ${project} logs -f ${service}
+	docker-compose -p ${project} logs -f ${service}-api
 
 .PHONY: logs-db
 logs-db:
@@ -35,37 +35,40 @@ build:
 .PHONY: clean
 clean: stop build start
 
+.PHONY: install-all-packages-in-container
+install-all-packages-in-container:
+	docker-compose -p ${project} exec ${service}-api pnpm install
+
 .PHONY: add
 add: install-package-in-container build
 
 .PHONY: install-package-in-container
 install-package-in-container:
-	docker-compose -p ${project} exec ${service} pnpm add ${package}
+	docker-compose -p ${project} exec ${service}-api pnpm add ${package}
 
 .PHONY: add-dev
 add-dev: install-dev-package-in-container build
 
 .PHONY: install-dev-package-in-container
 install-dev-package-in-container: start
-	docker-compose -p ${project} exec ${service} pnpm add -D ${package}
+	docker-compose -p ${project} exec ${service}-api pnpm add -D ${package}
 
 .PHONY: migration-create
 migration-create: start
-	docker-compose -p ${project} exec ${service} ./node_modules/db-migrate/bin/db-migrate create ${name} --sql-file
-	sudo chown -R $$USER ./migrations/sqls/
+	docker-compose -p ${project} exec ${service}-api ./node_modules/.bin/db-migrate create ${name}
 
 .PHONY: migrate-local
 migrate-local:
-	node_modules/db-migrate/bin/db-migrate up -e ${NODE_ENV}
+	./node_modules/.bin/db-migrate up -e ${NODE_ENV}
 
 .PHONY: migrate
 migrate: start
-# 	docker-compose -p ${project} exec ${service} make migrate-local // Use for a Unix environment like ubuntu
-	docker-compose -p ${project} exec ${service} node_modules/db-migrate/bin/db-migrate up -e ${NODE_ENV}
+# 	docker-compose -p ${project} exec ${service}-api make migrate-local // Use for a Unix environment like ubuntu
+	docker-compose -p ${project} exec ${service}-api ./node_modules/.bin/db-migrate up -e ${NODE_ENV}
 
 .PHONY: shell
 shell:
-	docker-compose -p ${project} exec ${service} sh
+	docker-compose -p ${project} exec ${service}-api sh
 
 .PHONY: mysql
 mysql:
@@ -76,15 +79,15 @@ test: start test-exec
 
 .PHONY: test-exec
 test-exec:
-	docker-compose -p ${project} exec ${service} pnpm test -- --exit
+	docker-compose -p ${project} exec ${service}-api pnpm test -- --exit
 
 .PHONY: lint-fix
 lint-fix: start
-	docker-compose -p ${project} exec ${service} pnpm lint:fix
+	docker-compose -p ${project} exec ${service}-api pnpm lint:fix
 
 .PHONY: test-cov
 test-cov:
-	docker-compose -p ${project} exec ${service} pnpm test-cov
+	docker-compose -p ${project} exec ${service}-api pnpm test-cov
 
 .PHONY: commit-hash
 commit-hash:

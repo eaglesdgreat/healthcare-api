@@ -1,5 +1,0 @@
-node_modules
-dist
-.git
-.dockerignore
-# Keep pnpm-lock.yaml OUT of this file
