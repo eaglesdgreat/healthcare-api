@@ -1,8 +1,8 @@
 import {
   Controller,
-  // Get,
+  Get,
   // Query,
-  // Post,
+  Post,
   // Body,
   // Put,
   // Param,
@@ -10,4 +10,14 @@ import {
 } from '@nestjs/common';
 
 @Controller('users')
-export class UserController {}
+export class UserController {
+  @Post()
+  create() {
+    return 'This action adds a new user';
+  }
+
+  @Get()
+  findAll() {
+    return 'This action returns all users';
+  }
+}
