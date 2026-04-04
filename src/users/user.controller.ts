@@ -4,9 +4,9 @@ import {
   // Query,
   Post,
   // Body,
-  // Put,
+  Put,
   // Param,
-  // Delete,
+  Delete,
 } from '@nestjs/common';
 
 @Controller('users')
@@ -19,5 +19,15 @@ export class UserController {
   @Get()
   findAll() {
     return 'This action returns all users';
+  }
+
+  @Put(':id')
+  update() {
+    return 'This action updates a user';
+  }
+
+  @Delete(':id')
+  delete() {
+    return 'This action deletes a user';
   }
 }
