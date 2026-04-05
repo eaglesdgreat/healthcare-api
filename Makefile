@@ -64,7 +64,7 @@ migrate-local:
 .PHONY: migrate
 migrate: start
 # 	docker-compose -p ${project} exec ${service}-api make migrate-local // Use for a Unix environment like ubuntu
-	docker-compose -p ${project} exec ${service}-api ./node_modules/.bin/db-migrate up -e ${NODE_ENV}
+	docker-compose -p ${project} exec ${service}-api pnpm exec db-migrate up -e ${NODE_ENV}
 
 .PHONY: shell
 shell:

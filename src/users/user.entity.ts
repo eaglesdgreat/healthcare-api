@@ -11,6 +11,21 @@ export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ name: 'first_name', length: 100 })
+  firstName: string;
+
+  @Column({ name: 'last_name', length: 100 })
+  lastName: string;
+
+  @Column({ name: 'phone_number', length: 20 })
+  phoneNumber: string;
+
+  @Column({ name: 'date_of_birth', type: 'date' })
+  dateOfBirth: Date;
+
+  @Column({ length: 10 })
+  gender: string;
+
   @Column({ unique: true })
   email: string;
 
