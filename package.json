@@ -37,6 +37,7 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/typeorm": "^11.0.0",
     "bcrypt": "^6.0.0",
+    "class-validator": "^0.15.1",
     "db-migrate": "^0.11.14",
     "mysql2": "^3.20.0",
     "reflect-metadata": "^0.2.2",
