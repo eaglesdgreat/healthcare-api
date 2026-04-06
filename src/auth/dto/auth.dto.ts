@@ -1,4 +1,11 @@
-export interface JWTPayload {
+export enum UserRole {
+  PATIENT = 'PATIENT',
+  DOCTOR = 'DOCTOR',
+  HOSPITAL = 'HOSPITAL',
+  ADMIN = 'ADMIN',
+}
+
+export interface JWTPayloadDTO {
   sub: string; // Subject (user ID)
   at: number; // Issued at
   exp: number; // Expiration time
@@ -6,11 +13,4 @@ export interface JWTPayload {
   scope: string[]; // Permissions/scopes
   role: UserRole;
   healthId?: string;
-}
-
-export enum UserRole {
-  PATIENT = 'PATIENT',
-  DOCTOR = 'DOCTOR',
-  HOSPITAL = 'HOSPITAL',
-  ADMIN = 'ADMIN',
 }
