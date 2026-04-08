@@ -1,4 +1,11 @@
-import { IsString, IsNumber, IsNotEmpty } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsNotEmpty,
+  // IsDecimal,
+  // IsPositive,
+  // IsUUID,
+} from 'class-validator';
 
 export enum UserRole {
   PATIENT = 'PATIENT',
