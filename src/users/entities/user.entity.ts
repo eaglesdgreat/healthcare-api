@@ -4,7 +4,21 @@ import {
   PrimaryGeneratedColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  DeleteDateColumn,
 } from 'typeorm';
+
+export enum UserRole {
+  PATIENT = 'PATIENT',
+  DOCTOR = 'DOCTOR',
+  HOSPITAL = 'HOSPITAL',
+  ADMIN = 'ADMIN',
+}
+
+export enum Gender {
+  MALE = 'MALE',
+  FEMALE = 'FEMALE',
+  OTHER = 'OTHER',
+}
 
 @Entity('users')
 export class User {
@@ -23,24 +37,30 @@ export class User {
   @Column({ name: 'date_of_birth', type: 'date' })
   dateOfBirth: Date;
 
-  @Column({ length: 10 })
+  @Column({ type: 'enum', enum: Gender, default: Gender.MALE, length: 10 })
   gender: string;
 
-  @Column({ unique: true })
+  @Column({ unique: true, nullable: true })
   email: string;
 
   @Column({ select: false }) // Exclude password from queries by default for security
   password: string;
 
-  @Column({ default: 'PATIENT' })
+  @Column({ name: 'health_id', length: 50 })
+  healthId: string;
+
+  @Column({ type: 'enum', enum: UserRole, default: UserRole.PATIENT })
   role: string;
 
-  @Column({ default: true })
+  @Column({ default: false })
   isActive: boolean;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @DeleteDateColumn({ name: 'deleted_at' }) // Add this for soft delete
+  deletedAt: Date;
 }

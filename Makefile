@@ -55,11 +55,15 @@ install-dev-package-in-container: start
 
 .PHONY: migration-create
 migration-create: start
-	docker-compose -p ${project} exec ${service}-api ./node_modules/.bin/db-migrate create ${name}
+	docker-compose -p ${project} exec ${service}-api pnpm exec db-migrate create ${name}
 
 .PHONY: migrate-local
 migrate-local:
 	./node_modules/.bin/db-migrate up -e ${NODE_ENV}
+
+.PHONY: migrate-down
+migrate-down:
+	docker-compose -p ${project} exec ${service}-api pnpm exec db-migrate down -e ${NODE_ENV}
 
 .PHONY: migrate
 migrate: start

@@ -17,12 +17,13 @@ exports.setup = function (options, seedLink) {
 exports.up = function (db) {
   return db.createTable('users', {
     id: { type: 'char(36)', primaryKey: true, notNull: true }, // Using UUID for healthcare security
-    email: { type: 'string', length: 255, notNull: true, unique: true },
+    email: { type: 'string', length: 255, null: true, unique: true },
     password: { type: 'string', length: 255, notNull: true },
     role: { type: 'string', length: 50, defaultValue: 'PATIENT' },
     is_active: { type: 'boolean', defaultValue: true },
     created_at: { type: 'datetime', defaultValue: 'CURRENT_TIMESTAMP' },
     updated_at: { type: 'datetime', defaultValue: 'CURRENT_TIMESTAMP' },
+    deleted_at: { type: 'datetime', defaultValue: 'CURRENT_TIMESTAMP' },
   });
 };
 
