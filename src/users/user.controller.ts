@@ -2,7 +2,7 @@ import {
   Controller,
   Get,
   // Query,
-  Post,
+  // Post,
   // Body,
   Put,
   // Param,
@@ -11,11 +11,6 @@ import {
 
 @Controller('users')
 export class UserController {
-  @Post()
-  create() {
-    return 'This action adds a new user';
-  }
-
   @Get()
   findAll() {
     return 'This action returns all users';
