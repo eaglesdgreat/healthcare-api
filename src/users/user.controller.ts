@@ -1,28 +1,81 @@
 import {
   Controller,
   Get,
-  // Query,
-  // Post,
-  // Body,
+  Query,
+  Post,
+  Body,
   Put,
-  // Param,
+  Param,
   Delete,
-} from '@nestjs/common';
+  ValidationPipe,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common'
+import { UsersService } from './users.service'
+import { PaginateUsersDto, SingleUserDTO } from './dto'
+import { User } from './entities/user.entity'
 
 @Controller('users')
 export class UserController {
+  constructor(private readonly usersService: UsersService) {}
+
+  // GET
   @Get()
-  findAll() {
-    return 'This action returns all users';
+  findAll(@Query(ValidationPipe) paginateDto: PaginateUsersDto) {
+    return this.usersService.findAll(paginateDto)
   }
 
+  @Get(':id')
+  findOne(
+    @Param('id') id: string,
+    @Query(ValidationPipe) filterDto: SingleUserDTO,
+  ) {
+    return this.usersService.findOne(id, filterDto)
+  }
+
+  // POST
+  @Post('restore/:id')
+  @HttpCode(HttpStatus.OK)
+  restore(@Param('id') id: string): Promise<{ message: string; user: User }> {
+    return this.usersService.restore(id)
+  }
+
+  @Post('bulk-soft-delete')
+  @HttpCode(HttpStatus.OK)
+  async bulkSoftDelete(
+    @Body('ids') ids: string[],
+  ): Promise<{ message: string; deletedCount: number }> {
+    return await this.usersService.bulkSoftDelete(ids)
+  }
+
+  @Post('bulk-restore')
+  @HttpCode(HttpStatus.OK)
+  async bulkRestore(
+    @Body('ids') ids: string[],
+  ): Promise<{ message: string; restoredCount: number }> {
+    return await this.usersService.bulkRestore(ids)
+  }
+
+  // PUT
   @Put(':id')
   update() {
-    return 'This action updates a user';
+    return 'Feature coming soon...'
   }
 
-  @Delete(':id')
-  delete() {
-    return 'This action deletes a user';
+  // DELETE
+  @Delete('soft/:id')
+  @HttpCode(HttpStatus.OK)
+  softDelete(
+    @Param('id') id: string,
+  ): Promise<{ message: string; user: User }> {
+    return this.usersService.softDelete(id)
+  }
+
+  @Delete('permanent/:id')
+  @HttpCode(HttpStatus.OK)
+  permanentDelete(
+    @Param('id') id: string,
+  ): Promise<{ message: string; user: User }> {
+    return this.permanentDelete(id)
   }
 }

@@ -1,16 +1,15 @@
-// src/users/users.service.ts
 import {
   Injectable,
   NotFoundException,
   ConflictException,
   InternalServerErrorException,
-} from '@nestjs/common';
-import { Repository } from 'typeorm';
-import { User } from './entities/user.entity';
-import { InjectRepository } from '@nestjs/typeorm';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UserRole } from './entities/user.entity';
-import { DeepPartial } from 'typeorm';
+} from '@nestjs/common'
+import { Repository, DeepPartial, Like, FindOptionsWhere } from 'typeorm'
+import { User } from './entities/user.entity'
+import { InjectRepository } from '@nestjs/typeorm'
+import { UserRole } from './entities/user.entity'
+import { CreateUserDto, PaginateUsersDto, SingleUserDTO } from './dto'
+import type { PaginationResponse } from '@/common/interfaces/user.interface'
 
 @Injectable()
 export class UsersService {
@@ -31,22 +30,20 @@ export class UsersService {
         password: user.contact.password,
         role: user.identity.role,
         healthId: await this.generateHealthId(user.identity.role),
-      };
+      }
 
-      const newUser = this.usersRepository.create(
-        userData as DeepPartial<User>,
-      );
-      await this.usersRepository.save(newUser);
+      const newUser = this.usersRepository.create(userData as DeepPartial<User>)
+      await this.usersRepository.save(newUser)
 
-      return newUser;
+      return newUser
     } catch (error) {
       if (
         error instanceof NotFoundException ||
         error instanceof ConflictException
       ) {
-        throw error;
+        throw error
       }
-      throw new InternalServerErrorException('Failed to create user');
+      throw new InternalServerErrorException('Failed to create user')
     }
   }
 
@@ -56,38 +53,38 @@ export class UsersService {
       // Find the user
       const user = await this.usersRepository.findOne({
         where: { id },
-      });
+      })
 
       if (!user) {
-        throw new NotFoundException(`User with ID ${id} not found`);
+        throw new NotFoundException(`User with ID ${id} not found`)
       }
 
       // Check if already deleted
       if (user.deletedAt) {
-        throw new ConflictException(`User with ID ${id} is already deleted`);
+        throw new ConflictException(`User with ID ${id} is already deleted`)
       }
 
       // Perform soft delete - this sets the deletedAt column
-      await this.usersRepository.softDelete(id);
+      await this.usersRepository.softDelete(id)
 
       // Fetch the soft-deleted user to return
       const deletedUser = await this.usersRepository.findOne({
         where: { id },
         withDeleted: true, // Important: This includes soft-deleted records
-      });
+      })
 
       return {
         message: `User with ID ${id} has been soft deleted successfully`,
         user: deletedUser as User,
-      };
+      }
     } catch (error: unknown) {
       if (
         error instanceof NotFoundException ||
         error instanceof ConflictException
       ) {
-        throw error;
+        throw error
       }
-      throw new InternalServerErrorException('Failed to soft delete user');
+      throw new InternalServerErrorException('Failed to soft delete user')
     }
   }
 
@@ -98,37 +95,37 @@ export class UsersService {
       const user = await this.usersRepository.findOne({
         where: { id },
         withDeleted: true,
-      });
+      })
 
       if (!user) {
-        throw new NotFoundException(`User with ID ${id} not found`);
+        throw new NotFoundException(`User with ID ${id} not found`)
       }
 
       // Check if not deleted
       if (!user.deletedAt) {
-        throw new ConflictException(`User with ID ${id} is not deleted`);
+        throw new ConflictException(`User with ID ${id} is not deleted`)
       }
 
       // Restore the user - this sets deletedAt to null
-      await this.usersRepository.restore(id);
+      await this.usersRepository.restore(id)
 
       // Fetch the restored user
       const restoredUser = await this.usersRepository.findOne({
         where: { id },
-      });
+      })
 
       return {
         message: `User with ID ${id} has been restored successfully`,
         user: restoredUser as User,
-      };
+      }
     } catch (error: unknown) {
       if (
         error instanceof NotFoundException ||
         error instanceof ConflictException
       ) {
-        throw error;
+        throw error
       }
-      throw new InternalServerErrorException('Failed to restore user');
+      throw new InternalServerErrorException('Failed to restore user')
     }
   }
 
@@ -139,130 +136,137 @@ export class UsersService {
       const user = await this.usersRepository.findOne({
         where: { id },
         withDeleted: true,
-      });
+      })
 
       if (!user) {
-        throw new NotFoundException(`User with ID ${id} not found`);
+        throw new NotFoundException(`User with ID ${id} not found`)
       }
 
       // Permanently remove from database
-      await this.usersRepository.delete(id);
+      await this.usersRepository.delete(id)
 
       return {
         message: `User with ID ${id} has been permanently deleted`,
-      };
+      }
     } catch (error: unknown) {
       if (error instanceof NotFoundException) {
-        throw error;
+        throw error
       }
       throw new InternalServerErrorException(
         'Failed to permanently delete user',
-      );
+      )
     }
   }
 
-  // Find all users (not soft-deleted)
-  async findAll(page = 1, limit = 20): Promise<User[]> {
+  // Find all users with query params for active and soft deleted users
+  async findAll(
+    paginatedDto: PaginateUsersDto,
+  ): Promise<PaginationResponse<User>> {
     try {
-      return await this.usersRepository.find({
+      const {
+        page = 1,
+        limit = 20,
+        search,
+        role,
+        isActive,
+        withDeleted,
+        sortBy,
+        sortOrder,
+      } = paginatedDto
+
+      // Build where conditions
+      let where: FindOptionsWhere<User> | FindOptionsWhere<User>[] = {}
+
+      if (search) {
+        where = [
+          { firstName: Like(`%${search}%`) },
+          { lastName: Like(`%${search}%`) },
+          { phoneNumber: Like(`%${search}%`) },
+          { healthId: Like(`%${search}%`) },
+        ]
+      }
+
+      if (role) {
+        // Handle role filter with existing search
+        if (Array.isArray(where)) {
+          // If where is already an array (from search), add role to each condition
+          where = where.map((condition) => ({ ...condition, role }))
+        } else {
+          where = { ...where, role }
+        }
+      }
+
+      if (isActive) {
+        if (Array.isArray(where)) {
+          where = where.map((condition) => ({ ...condition, isActive }))
+        } else {
+          where = { ...where, isActive }
+        }
+      }
+
+      // Calculate pagination
+      const skip = ((page || 1) - 1) * (limit || 20)
+
+      // Execute query
+      const [data, total] = await this.usersRepository.findAndCount({
+        where,
+        skip,
         take: limit,
-        skip: (page - 1) * limit,
-      });
+        order: { [sortBy as string]: sortOrder },
+        withDeleted: withDeleted || false,
+      })
+
+      // Calculate pagination metadata
+      const totalPages = Math.ceil(total / limit)
+      const hasNextPage = page < totalPages
+      const hasPreviousPage = page > 1
+
+      return {
+        data,
+        meta: {
+          page,
+          limit,
+          total,
+          totalPages,
+          hasNextPage,
+          hasPreviousPage,
+        },
+      }
     } catch (error) {
       if (error instanceof NotFoundException) {
-        throw error;
+        throw error
       }
-      throw new InternalServerErrorException('Failed to fetch all users');
+      throw new InternalServerErrorException('Failed to fetch all users')
     }
   }
 
-  // Find all active users (not soft-deleted)
-  async findAllActive(page = 1, limit = 20): Promise<User[]> {
+  // Find a single user by ID which can be active or soft delete user
+  async findOne(id: string, filterDto: SingleUserDTO): Promise<User> {
     try {
-      // This automatically excludes soft-deleted users
-      return await this.usersRepository.find({
-        where: { isActive: true },
-        take: limit,
-        skip: (page - 1) * limit,
-      });
-    } catch (error: unknown) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new InternalServerErrorException('Failed to fetch active users');
-    }
-  }
+      const { withDeleted, isActive } = filterDto
 
-  // Find all users including soft-deleted ones
-  async findAllIncludingDeleted(page = 1, limit = 20): Promise<User[]> {
-    try {
-      return await this.usersRepository.find({
-        withDeleted: true, // Includes soft-deleted records
-        take: limit,
-        skip: (page - 1) * limit,
-      });
-    } catch (error: unknown) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new InternalServerErrorException('Failed to fetch all users');
-    }
-  }
+      // Build where conditions
+      const where: FindOptionsWhere<User> = { id }
 
-  // Find only soft-deleted users
-  async findSoftDeleted(): Promise<User[]> {
-    try {
-      return await this.usersRepository.find({
-        withDeleted: true,
-      });
-    } catch (error: unknown) {
-      if (error instanceof NotFoundException) {
-        throw error;
+      if (isActive) {
+        where.isActive = isActive
       }
-      throw new InternalServerErrorException(
-        'Failed to fetch soft-deleted users',
-      );
-    }
-  }
 
-  // Find a single user by ID (excluding soft-deleted by default)
-  async findOne(id: string): Promise<User> {
-    try {
       const user = await this.usersRepository.findOne({
-        where: { id },
-      });
+        where,
+        withDeleted: withDeleted || false,
+      })
 
       if (!user) {
-        throw new NotFoundException(`User with ID ${id} not found`);
+        throw new NotFoundException(`User with ID ${id} not found`)
       }
 
-      return user;
+      return user
     } catch (error: unknown) {
       if (error instanceof NotFoundException) {
-        throw error;
+        throw error
       }
-      throw new InternalServerErrorException('Failed to fetch user');
-    }
-  }
-
-  // Find a single user including soft-deleted
-  async findOneIncludingDeleted(id: string): Promise<User> {
-    try {
-      const user = await this.usersRepository.findOne({
-        where: { id },
-        withDeleted: true,
-      });
-
-      if (!user) {
-        throw new NotFoundException(`User with ID ${id} not found`);
-      }
-
-      return user;
-    } catch (error: unknown) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new InternalServerErrorException('Failed to fetch user');
+      throw new InternalServerErrorException('Failed to fetch user')
     }
   }
 
@@ -271,19 +275,17 @@ export class UsersService {
     ids: string[],
   ): Promise<{ message: string; deletedCount: number }> {
     try {
-      const result = await this.usersRepository.softDelete(ids);
+      const result = await this.usersRepository.softDelete(ids)
 
       return {
         message: `${result.affected} users have been soft deleted successfully`,
         deletedCount: result.affected || 0,
-      };
+      }
     } catch (error: unknown) {
       if (error instanceof NotFoundException) {
-        throw error;
+        throw error
       }
-      throw new InternalServerErrorException(
-        'Failed to bulk soft delete users',
-      );
+      throw new InternalServerErrorException('Failed to bulk soft delete users')
     }
   }
 
@@ -292,50 +294,50 @@ export class UsersService {
     ids: string[],
   ): Promise<{ message: string; restoredCount: number }> {
     try {
-      const result = await this.usersRepository.restore(ids);
+      const result = await this.usersRepository.restore(ids)
 
       return {
         message: `${result.affected} users have been restored successfully`,
         restoredCount: result.affected || 0,
-      };
+      }
     } catch (error: unknown) {
       if (error instanceof NotFoundException) {
-        throw error;
+        throw error
       }
-      throw new InternalServerErrorException('Failed to bulk restore users');
+      throw new InternalServerErrorException('Failed to bulk restore users')
     }
   }
 
   private async generateHealthId(role: UserRole): Promise<string> {
-    const prefix = this.getRolePrefix(role);
-    let healthId: string = '';
-    let isUnique = false;
-    let attempts = 0;
-    const maxAttempts = 20;
+    const prefix = this.getRolePrefix(role)
+    let healthId: string = ''
+    let isUnique = false
+    let attempts = 0
+    const maxAttempts = 20
 
     while (!isUnique && attempts < maxAttempts) {
-      const randomId = this.generateRandomAlphanumeric(8);
-      healthId = `${prefix}-${randomId}`;
+      const randomId = this.generateRandomAlphanumeric(8)
+      healthId = `${prefix}-${randomId}`
 
       // Check if this healthId already exists
       const existingUser = await this.usersRepository.findOne({
         where: { healthId },
-      });
+      })
 
       if (!existingUser) {
-        isUnique = true;
+        isUnique = true
       }
-      attempts++;
+      attempts++
     }
 
     if (!isUnique) {
       // If we couldn't generate a unique ID after max attempts, add timestamp
-      const timestamp = Date.now().toString().slice(-4);
-      const randomId = this.generateRandomAlphanumeric(4);
-      healthId = `${prefix}-${randomId}${timestamp}`;
+      const timestamp = Date.now().toString().slice(-4)
+      const randomId = this.generateRandomAlphanumeric(4)
+      healthId = `${prefix}-${randomId}${timestamp}`
     }
 
-    return healthId;
+    return healthId
   }
 
   private getRolePrefix(role: UserRole): string {
@@ -344,18 +346,18 @@ export class UsersService {
       [UserRole.DOCTOR]: 'DOC',
       [UserRole.HOSPITAL]: 'HOS',
       [UserRole.ADMIN]: 'ADM',
-    };
-    return prefixes[role];
+    }
+    return prefixes[role]
   }
 
   private generateRandomAlphanumeric(length: number): string {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    const array = new Array(length);
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    const array = new Array(length)
     for (let i = 0; i < length; i++) {
       array[i] = characters.charAt(
         Math.floor(Math.random() * characters.length),
-      );
+      )
     }
-    return array.join('');
+    return array.join('')
   }
 }
