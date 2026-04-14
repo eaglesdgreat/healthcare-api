@@ -5,7 +5,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   DeleteDateColumn,
-} from 'typeorm';
+} from 'typeorm'
 
 export enum UserRole {
   PATIENT = 'PATIENT',
@@ -23,44 +23,44 @@ export enum Gender {
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id: string
 
   @Column({ name: 'first_name', length: 100 })
-  firstName: string;
+  firstName: string
 
   @Column({ name: 'last_name', length: 100 })
-  lastName: string;
+  lastName: string
 
   @Column({ name: 'phone_number', length: 20 })
-  phoneNumber: string;
+  phoneNumber: string
 
   @Column({ name: 'date_of_birth', type: 'date' })
-  dateOfBirth: Date;
+  dateOfBirth: Date
 
-  @Column({ type: 'enum', enum: Gender, default: Gender.MALE, length: 10 })
-  gender: string;
+  @Column({ type: 'enum', enum: Gender, default: Gender.MALE })
+  gender: string
 
   @Column({ unique: true, nullable: true })
-  email: string;
+  email: string
 
   @Column({ select: false }) // Exclude password from queries by default for security
-  password: string;
+  password: string
 
   @Column({ name: 'health_id', length: 50 })
-  healthId: string;
+  healthId: string
 
   @Column({ type: 'enum', enum: UserRole, default: UserRole.PATIENT })
-  role: string;
+  role: string
 
-  @Column({ default: false })
-  isActive: boolean;
+  @Column({ name: 'is_active', default: false })
+  isActive: boolean
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  createdAt: Date
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  updatedAt: Date
 
   @DeleteDateColumn({ name: 'deleted_at' }) // Add this for soft delete
-  deletedAt: Date;
+  deletedAt: Date
 }

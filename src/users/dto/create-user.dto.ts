@@ -6,9 +6,9 @@ import {
   MinLength,
   Matches,
   IsNotEmpty,
-} from 'class-validator';
-import { Transform } from 'class-transformer';
-import { Gender, UserRole } from '../entities/user.entity';
+} from 'class-validator'
+import { Transform } from 'class-transformer'
+import { Gender, UserRole } from '../entities/user.entity'
 
 // Enum for Blood Group
 export enum BloodGroup {
@@ -35,26 +35,26 @@ export class IdentityDto {
   @IsString({ message: 'First name must be a string' })
   @MinLength(2, { message: 'First name is required' })
   @Transform(({ value }: { value: string }): string => value?.trim())
-  firstName: string;
+  firstName: string
 
   @IsString({ message: 'Last name must be a string' })
   @MinLength(2, { message: 'Last name is required' })
   @Transform(({ value }: { value: string }) => value?.trim())
-  lastName: string;
+  lastName: string
 
   @IsString({ message: 'Date of birth must be a string' })
   @Matches(/^\d{4}-\d{2}-\d{2}$/, {
     message: 'Invalid date format (YYYY-MM-DD)',
   })
-  dateOfBirth: string;
+  dateOfBirth: string
 
   @IsEnum(UserRole, { message: 'User role must be a string' })
-  role: UserRole;
+  role: UserRole
 
   @IsEnum(Gender, {
     message: 'Please select your gender at birth',
   })
-  gender: Gender;
+  gender: Gender
 }
 
 // Contact DTO
@@ -64,12 +64,12 @@ export class ContactDto {
   @Transform(({ value }: { value: string | null }) =>
     value?.toLowerCase()?.trim(),
   )
-  email?: string | null;
+  email?: string | null
 
   @IsString({ message: 'Phone number must be a string' })
   @MinLength(10, { message: 'Enter a valid phone number' })
   @Matches(/^[0-9+\-\s()]+$/, { message: 'Enter a valid phone number' })
-  phoneNumber: string;
+  phoneNumber: string
 
   @IsString({ message: 'Password must be a string' })
   @MinLength(8, { message: 'Security requires at least 8 characters' })
@@ -83,7 +83,7 @@ export class ContactDto {
   @Matches(/[^A-Za-z0-9]/, {
     message: 'Password must contain at least one special character',
   })
-  password: string;
+  password: string
 }
 
 // Medical DTO
@@ -91,35 +91,35 @@ export class MedicalDto {
   @IsString({ message: 'Blood group must be a string' })
   @IsNotEmpty({ message: 'Blood group is required for your Health ID' })
   @IsEnum(BloodGroup, { message: 'Please select a valid blood group' })
-  bloodGroup: string;
+  bloodGroup: string
 
   @IsString({ message: 'Genotype must be a string' })
   @IsNotEmpty({ message: 'Genotype is required for your Health ID' })
   @IsEnum(Genotype, { message: 'Please select a valid genotype' })
-  genotype: string;
+  genotype: string
 
   @IsOptional()
   @IsString({ message: 'Allergies must be a string' })
-  allergies?: string;
+  allergies?: string
 
   @IsString({ message: 'Emergency contact phone must be a string' })
   @MinLength(10, { message: 'Emergency contact phone is required' })
-  emergencyContactPhone: string;
+  emergencyContactPhone: string
 
   @IsString({ message: 'Emergency contact name must be a string' })
   @MinLength(2, { message: 'Emergency contact name is required' })
   @Transform(({ value }: { value: string }) => value?.trim())
-  emergencyContactName: string;
+  emergencyContactName: string
 }
 
 // Main Create User DTO
 export class CreateUserDto {
   @Transform(({ value }: { value: IdentityDto }) => value)
-  identity: IdentityDto;
+  identity: IdentityDto
 
   @Transform(({ value }: { value: ContactDto }) => value)
-  contact: ContactDto;
+  contact: ContactDto
 
   @Transform(({ value }: { value: MedicalDto }) => value)
-  medical: MedicalDto;
+  medical: MedicalDto
 }
