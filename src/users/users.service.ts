@@ -37,6 +37,7 @@ export class UsersService {
 
       return newUser
     } catch (error) {
+      console.error(error)
       if (
         error instanceof NotFoundException ||
         error instanceof ConflictException
@@ -78,6 +79,7 @@ export class UsersService {
         user: deletedUser as User,
       }
     } catch (error: unknown) {
+      console.error(error)
       if (
         error instanceof NotFoundException ||
         error instanceof ConflictException
@@ -119,6 +121,7 @@ export class UsersService {
         user: restoredUser as User,
       }
     } catch (error: unknown) {
+      console.error(error)
       if (
         error instanceof NotFoundException ||
         error instanceof ConflictException
@@ -149,6 +152,7 @@ export class UsersService {
         message: `User with ID ${id} has been permanently deleted`,
       }
     } catch (error: unknown) {
+      console.error(error)
       if (error instanceof NotFoundException) {
         throw error
       }
@@ -233,6 +237,7 @@ export class UsersService {
         },
       }
     } catch (error) {
+      console.error(error)
       if (error instanceof NotFoundException) {
         throw error
       }
@@ -263,6 +268,36 @@ export class UsersService {
 
       return user
     } catch (error: unknown) {
+      console.error(error)
+      if (error instanceof NotFoundException) {
+        throw error
+      }
+      throw new InternalServerErrorException('Failed to fetch user')
+    }
+  }
+
+  async findUserByUsername(username: string) {
+    try {
+      const user = await this.usersRepository.findOne({
+        where: [
+          { phoneNumber: username },
+          { email: username },
+          { healthId: username },
+        ],
+        select: [
+          'id',
+          'email',
+          'password',
+          'isActive',
+          'role',
+          'healthId',
+          'phoneNumber',
+        ],
+      })
+
+      return user
+    } catch (error) {
+      console.error(error)
       if (error instanceof NotFoundException) {
         throw error
       }
@@ -282,6 +317,7 @@ export class UsersService {
         deletedCount: result.affected || 0,
       }
     } catch (error: unknown) {
+      console.error(error)
       if (error instanceof NotFoundException) {
         throw error
       }
@@ -301,6 +337,7 @@ export class UsersService {
         restoredCount: result.affected || 0,
       }
     } catch (error: unknown) {
+      console.error(error)
       if (error instanceof NotFoundException) {
         throw error
       }
