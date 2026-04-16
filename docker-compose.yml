@@ -15,7 +15,7 @@ services:
     ports:
       - 5501:5501
     env_file:
-      - ./database.env
+      - ./.env
     links:
       - ms-auth-db
     environment:
@@ -33,7 +33,7 @@ services:
     expose:
       - 3306
     env_file:
-      - ./database.env
+      - ./.env
     volumes:
       - ms-auth-db_vol:/var/lib/mysql
     restart: always
