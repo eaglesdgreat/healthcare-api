@@ -27,9 +27,9 @@ import { ConfigService } from '@nestjs/config'
           synchronize: false, // Set to false in production!
           migrations: [__dirname + '/migrations/*{.ts,.js}'],
           migrationsRun: true,
-          // cli: {
-          //   migrationsDir: 'src/migrations',
-          // },
+          cli: {
+            migrationsDir: '/migrations',
+          },
         }
       },
     }),
