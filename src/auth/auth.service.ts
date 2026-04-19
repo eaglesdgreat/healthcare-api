@@ -67,6 +67,7 @@ export class AuthService {
 
       throw new UnauthorizedException('Signup to create user')
     } catch (error) {
+      console.error(error)
       if (error instanceof Error) {
         throw error
       }
