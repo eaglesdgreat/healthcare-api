@@ -1,10 +1,19 @@
 import { NestFactory } from '@nestjs/core'
 import { AppModule } from './app.module'
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger'
+import { ValidationPipe } from '@nestjs/common'
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule)
 
+  // Global Validation Config
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+    }),
+  )
+
+  // Swagger Doc COnfig
   const config = new DocumentBuilder()
     .setTitle('Healthcare Users Authentication & Authorization Service')
     .setDescription(
