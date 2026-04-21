@@ -96,3 +96,80 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+# 🏗 System Architecture: Identity & Auth Flow
+
+### 1. Unified Identity System (The Global Health ID)
+
+We use a prefixed identification system to categorize users across the ecosystem. This allows the system to route logic based on the entity type immediately upon entry.
+
+PAT-XXXXXX: Patients (Medical History, Personal Records)
+
+DOC-XXXXXX: Doctors (Consultations, Prescriptions)
+
+HOS-XXXXXX: Hospitals (Facility Management, Appointments)
+
+### 2. Authentication Flow (Auth Service)
+
+Sign-Up
+Validation: LoginUserDto ensures the email/phone is unique.
+
+ID Generation: Based on the chosen role, a unique Health ID is generated with the correct prefix (PAT-, DOC-, HOS-).
+
+Security: Passwords are hashed using Bcrypt.
+
+Persistence: User data is stored in the ms-auth-db (MySQL).
+
+#### Sign-In
+
+Multi-Identifier Input: Users can log in using Email, Phone, or Health ID.
+
+Normalization: Inputs are trimmed and transformed to uppercase/lowercase via class-transformer to ensure matching.
+
+JWT Issuance: Upon successful login, the Auth Service issues a JWT containing:
+
+sub: User UUID
+
+healthId: The prefixed ID
+
+role: (Patient, Doctor, or Admin)
+
+### 3. Cross-Service Communication
+
+The Auth Service is the Identity Provider (IdP) for other microservices. Communication follows these patterns:
+
+#### A. Synchronous (Internal API Gateway / Traefik)
+
+When a user tries to book an appointment:
+
+Request: GET /appointments hits the Appointment Service.
+
+Authorization: The Appointment Service extracts the JWT and verifies the signature (using a shared secret or public key).
+
+Context: The service uses the healthId from the token to filter data (e.g., a Patient only sees their own appointments).
+
+#### B. Asynchronous (Event-Driven)
+
+When a new Patient is created in the Auth Service:
+
+Event: user.registered is emitted.
+
+Consumer: The Patient Service listens and automatically creates a blank "Medical Ledger" or "Electronic Health Record (EHR)" profile for that specific healthId.
+
+### 4. Security & Data Integrity
+
+Input Protection: Strict Regex validation on Health IDs to prevent injection.
+
+Rate Limiting: Integrated at the Traefik level to prevent brute-force attacks on login.
+
+Audit Trail: Every login attempt is logged (visible in Docker logs) to track unauthorized access to the healthcare platform.
+
+### 5. Development Workflow (Docker)
+
+This project uses Docker Compose for a "Hot-Reload" environment:
+
+Watch Mode: The ms-auth-api uses a Bind Mount to sync code from the Windows host to the Linux container.
+
+Environment: Managed via database.env (Ignored in Git for security).
+
+Migrations: Managed via db-migrate to ensure the users table stays consistent across all developer machines.

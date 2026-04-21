@@ -22,15 +22,25 @@ export class HttpExceptionFilter implements ExceptionFilter {
       exception instanceof HttpException
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR
+    const response =
+      exception instanceof HttpException
+        ? exception.getResponse()
+        : {
+            message:
+              'Something went wrong on the server. Contact support if the problem persists.',
+            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+            error: 'Internal Server Error',
+          }
 
     const responseBody = {
-      statusCode: httpStatus,
-      timestamp: new Date().toISOString(),
-      path: httpAdapter.getRequestUrl(ctx.getRequest()) as string,
-      message:
+      type:
         exception instanceof HttpException
           ? exception.message
           : 'Internal server error',
+      statusCode: httpStatus,
+      timestamp: new Date().toISOString(),
+      path: httpAdapter.getRequestUrl(ctx.getRequest()) as string,
+      response,
     }
 
     httpAdapter.reply(ctx.getResponse(), responseBody, httpStatus)
