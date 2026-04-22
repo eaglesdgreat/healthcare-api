@@ -10,6 +10,7 @@ import {
   ValidationPipe,
   HttpCode,
   HttpStatus,
+  ParseUUIDPipe,
 } from '@nestjs/common'
 import { UsersService } from './users.service'
 import { PaginateUsersDto, SingleUserDTO } from './dto'
@@ -27,7 +28,7 @@ export class UserController {
 
   @Get(':id')
   findOne(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Query(ValidationPipe) filterDto: SingleUserDTO,
   ) {
     return this.usersService.findOne(id, filterDto)
@@ -36,7 +37,9 @@ export class UserController {
   // POST
   @Post('restore/:id')
   @HttpCode(HttpStatus.OK)
-  restore(@Param('id') id: string): Promise<{ message: string; user: User }> {
+  restore(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ message: string; user: User }> {
     return this.usersService.restore(id)
   }
 
@@ -66,7 +69,7 @@ export class UserController {
   @Delete('soft/:id')
   @HttpCode(HttpStatus.OK)
   softDelete(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<{ message: string; user: User }> {
     return this.usersService.softDelete(id)
   }
@@ -74,7 +77,7 @@ export class UserController {
   @Delete('permanent/:id')
   @HttpCode(HttpStatus.OK)
   permanentDelete(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ): Promise<{ message: string; user: User }> {
     return this.permanentDelete(id)
   }
