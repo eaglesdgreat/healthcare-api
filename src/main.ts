@@ -19,7 +19,7 @@ async function bootstrap() {
     .setDescription(
       'This is the authentication and authorization service where we get to know the user coming to the platform and what they are allow to access.',
     )
-    .setVersion('1.0')
+    .setVersion('1.1')
     .addTag('users')
     .build()
   const documentFactory = () => SwaggerModule.createDocument(app, config)
