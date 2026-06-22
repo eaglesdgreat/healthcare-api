@@ -97,3 +97,45 @@ When a user signs up using credentials or Google OAuth2, they are placed in a ho
 3. **Notification Consumption:** The ms-notification-service consumes the event and dispatches an Email (via SendGrid), an SMS (via Twilio), or a Push Notification (via Firebase Cloud Messaging) based on the user's preferred contact method.
 
 4. **Activation:** The user submits the token to POST /auth/activate. Upon validation, is_active is updated to true, the token is cleared, and an integration event user.registered is published to notify downstream domain services (Patient, Doctor, Hospital) to safely provision empty profiles mapped to that health_id.
+
+#### 4.2 Unified Authentication (Sign-In Engine)
+
+The authentication route accepts a single polymorphic input string (username) that maps to an Email, Phone Number, or Health ID via custom class-validator constraints.
+
+```javascript
+// Core database lookup pattern inside AuthService
+const user = await this.usersRepository.findOne({
+  where: [
+    { email: username },
+    { phoneNumber: username },
+    { healthId: username },
+  ],
+})
+
+if (!user) throw new UnauthorizedException('Invalid credentials')
+if (!user.is_active) throw new ForbiddenException('Account requires activation')
+```
+
+#### 4.3 Google Sign-In Integration
+
+1. The client identity layer transmits an openID Connect id_token obtained from Google to POST /auth/google.
+
+2. ms-auth-api cross-verifies the cryptographic token signature against Google's public JSON Web Key Sets (JWKS).
+
+3. If the email exists and matches an activated account, a native system JWT is immediately issued.
+
+4. If the email is unknown, the application provisions a new inactive user, triggers the specific role assignment step, updates the database, and publishes the account creation hooks.
+
+#### 4.4 Offline-First & Service Worker Architecture
+
+Since the platform uses an offline-first synchronization strategy, token issuance and lifetime management must support detached clients.
+
+**Client Token Strategies**
+
+- **Active Window:** The frontend application stores the short-lived access token in volatile memory (MemoryStorage).
+
+- **Refresh Tokens:** A highly secured, encrypted refresh token is stored inside an httpOnly, Secure, SameSite=Strict cookie managed by the browser runtime environment.
+
+- **Service Worker Boundary:** When network connectivity drops, the client-side Service Worker intercepts outbound requests. It reads the local state metadata to verify if the token was valid when the connection was lost.
+
+- **Offline Queueing:** If the token timestamp is internally valid, the Service Worker allows the client to commit mutation blocks (e.g., scheduling an offline appointment) into an internal client database storage engine (IndexedDB), flagging them for immediate synchronization once network state transitions back to an online status.
