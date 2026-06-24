@@ -139,3 +139,14 @@ Since the platform uses an offline-first synchronization strategy, token issuanc
 - **Service Worker Boundary:** When network connectivity drops, the client-side Service Worker intercepts outbound requests. It reads the local state metadata to verify if the token was valid when the connection was lost.
 
 - **Offline Queueing:** If the token timestamp is internally valid, the Service Worker allows the client to commit mutation blocks (e.g., scheduling an offline appointment) into an internal client database storage engine (IndexedDB), flagging them for immediate synchronization once network state transitions back to an online status.
+
+5. ## Distributed Security Architecture
+   Cryptographic Baselines: All passwords processed using bcrypt at a workload factor of 12.
+
+Gateway Ingress Defenses: Traefik forces TLS 1.3 protocol requirements and acts as a rate-limiting umbrella protecting auth execution paths from distributed credential stuffing attacks.
+
+Input Sanitization Constraints: Strict structural transformations via class-transformer format identifiers to unified cases (e.g., mapping incoming string variants to standard uppercase values like PAT-12345678) to protect internal lookup algorithms.
+
+This completed design block can be written directly to your project root as DESIGN_AUTH.md. It perfectly outlines your decoupled service structures.
+
+Now that this is fully documented, shall we proceed with the Technical Design Document for the Medical Appointment Microservice Architecture?
