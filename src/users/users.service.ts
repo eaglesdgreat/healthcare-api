@@ -345,7 +345,7 @@ export class UsersService {
     }
   }
 
-  private async generateHealthId(role: UserRole): Promise<string> {
+  async generateHealthId(role: UserRole): Promise<string> {
     const prefix = this.getRolePrefix(role)
     let healthId: string = ''
     let isUnique = false
