@@ -11,7 +11,7 @@ import { User } from '@/users/entities/user.entity'
 import * as bcrypt from 'bcrypt'
 import { LoginUserDto } from './dto/login-user.dto'
 import { RegisterUserDto } from './dto/register-user.dto'
-import { Repository } from 'typeorm'
+import { Repository, DeepPartial } from 'typeorm'
 import { InjectRepository } from '@nestjs/typeorm'
 @Injectable()
 export class AuthService {
@@ -64,7 +64,7 @@ export class AuthService {
         role,
         healthId,
         isActive: false, // Remains false until notification confirmation loop handles it
-      })
+      } as DeepPartial<User>)
 
       // Ideally update schema definition later to allow NULL values on gender/DOB fields
       // if you don't want to enforce these placeholders.
