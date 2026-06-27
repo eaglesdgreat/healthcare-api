@@ -4,13 +4,12 @@ import {
   ConflictException,
   InternalServerErrorException,
 } from '@nestjs/common'
-import { Repository, Like, FindOptionsWhere } from 'typeorm'
+import { Repository, DeepPartial, Like, FindOptionsWhere } from 'typeorm'
 import { User } from './entities/user.entity'
 import { InjectRepository } from '@nestjs/typeorm'
 import { UserRole } from './entities/user.entity'
-import { PaginateUsersDto, SingleUserDTO } from './dto'
+import { CreateUserDto, PaginateUsersDto, SingleUserDTO } from './dto'
 import type { PaginationResponse } from '@/common/interfaces/user.interface'
-import { RegisterUserDto } from '@/auth/dto/register-user.dto'
 
 @Injectable()
 export class UsersService {
@@ -19,9 +18,21 @@ export class UsersService {
     private readonly usersRepository: Repository<User>,
   ) {}
 
-  async create(user: RegisterUserDto): Promise<User> {
+  async create(user: CreateUserDto): Promise<User> {
     try {
-      const newUser = this.usersRepository.create(user)
+      const userData = {
+        firstName: user.identity.firstName,
+        lastName: user.identity.lastName,
+        dateOfBirth: user.identity.dateOfBirth,
+        gender: user.identity.gender,
+        email: user.contact?.email || null,
+        phoneNumber: user.contact.phoneNumber,
+        password: user.contact.password,
+        role: user.identity.role,
+        healthId: await this.generateHealthId(user.identity.role),
+      }
+
+      const newUser = this.usersRepository.create(userData as DeepPartial<User>)
       await this.usersRepository.save(newUser)
 
       return newUser

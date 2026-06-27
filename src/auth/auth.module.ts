@@ -6,6 +6,8 @@ import { JwtModule } from '@nestjs/jwt'
 import { ConfigService } from '@nestjs/config'
 import { AuthGuard } from './auth.guards'
 import { APP_GUARD } from '@nestjs/core/constants'
+import { TypeOrmModule } from '@nestjs/typeorm'
+import { User } from '@/users/entities/user.entity'
 
 @Module({
   providers: [
@@ -16,7 +18,7 @@ import { APP_GUARD } from '@nestjs/core/constants'
     AuthService,
   ],
   imports: [
-    UsersModule,
+    TypeOrmModule.forFeature([User]),
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
@@ -25,7 +27,9 @@ import { APP_GUARD } from '@nestjs/core/constants'
         global: true,
       }),
     }),
+    UsersModule,
   ],
   controllers: [AuthController],
+  exports: [AuthService],
 })
 export class AuthModule {}
