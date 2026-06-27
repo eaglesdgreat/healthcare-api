@@ -1,3 +1,4 @@
+// src/users/entities/user.entity.ts
 import {
   Entity,
   Column,
@@ -34,16 +35,18 @@ export class User {
   @Column({ name: 'phone_number', length: 20 })
   phoneNumber: string
 
-  @Column({ name: 'date_of_birth', type: 'date' })
-  dateOfBirth: Date
+  // Made nullable for the onboarding profile page step
+  @Column({ name: 'date_of_birth', type: 'date', nullable: true })
+  dateOfBirth: Date | null
 
-  @Column({ type: 'enum', enum: Gender, default: Gender.MALE })
-  gender: string
+  // Removed default default value and made nullable
+  @Column({ type: 'enum', enum: Gender, nullable: true })
+  gender: string | null
 
   @Column({ unique: true, nullable: true })
   email: string
 
-  @Column({ select: false }) // Exclude password from queries by default for security
+  @Column({ select: false })
   password: string
 
   @Column({ name: 'health_id', length: 50 })
@@ -55,12 +58,23 @@ export class User {
   @Column({ name: 'is_active', default: false })
   isActive: boolean
 
+  @Column({ name: 'activation_token', nullable: true, select: false })
+  activationToken: string | null
+
+  @Column({
+    name: 'activation_expires_at',
+    type: 'timestamp',
+    nullable: true,
+    select: false,
+  })
+  activationExpiresAt: Date | null
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date
 
-  @DeleteDateColumn({ name: 'deleted_at' }) // Add this for soft delete
+  @DeleteDateColumn({ name: 'deleted_at' })
   deletedAt: Date
 }

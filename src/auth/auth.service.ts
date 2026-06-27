@@ -9,8 +9,7 @@ import { JwtService } from '@nestjs/jwt'
 import { UsersService } from '@/users/users.service'
 import { User } from '@/users/entities/user.entity'
 import * as bcrypt from 'bcrypt'
-import { LoginUserDto } from './dto/login-user.dto'
-import { RegisterUserDto } from './dto/register-user.dto'
+import { LoginUserDto, RegisterUserDto } from './dto'
 import { Repository, DeepPartial } from 'typeorm'
 import { InjectRepository } from '@nestjs/typeorm'
 @Injectable()
@@ -49,7 +48,7 @@ export class AuthService {
       const passwordHash = await bcrypt.hash(password, salt)
 
       // 3. Generate tracking and validation metadata
-      const healthId = this.usersService.generateHealthId(role)
+      const healthId = await this.usersService.generateHealthId(role)
       // const activationToken = Math.random().toString(36).substring(2, 15) // or crypto.randomBytes
       const activationExpiresAt = new Date()
       activationExpiresAt.setHours(activationExpiresAt.getHours() + 24) // 24-hour expiration window
@@ -63,7 +62,7 @@ export class AuthService {
         password: passwordHash,
         role,
         healthId,
-        isActive: false, // Remains false until notification confirmation loop handles it
+        isActive: false,
       } as DeepPartial<User>)
 
       // Ideally update schema definition later to allow NULL values on gender/DOB fields

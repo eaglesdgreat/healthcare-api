@@ -2,7 +2,7 @@ default: start
 
 project:=healthcare
 service:=ms-auth
-NODE_ENV?=dev
+NODE_ENV:=dev
 COMMIT_HASH = $(shell git rev-parse --verify HEAD)
 
 .PHONY: start
