@@ -111,28 +111,45 @@ HOS-XXXXXX: Hospitals (Facility Management, Appointments)
 
 ### 2. Authentication Flow (Auth Service)
 
+This service implements a registration -> activation -> login flow and acts as the Identity Provider (IdP) for the ecosystem.
+
 Sign-Up
-Validation: LoginUserDto ensures the email/phone is unique.
 
-ID Generation: Based on the chosen role, a unique Health ID is generated with the correct prefix (PAT-, DOC-, HOS-).
+- Validation: Incoming registration requests are validated with class-validator (see RegisterUserDto).
+- ID Generation: A prefixed Health ID (PAT-, DOC-, HOS-) is generated based on the chosen role.
+- Security: Passwords are hashed using bcrypt before being persisted.
+- Activation: Newly registered users are created as inactive (isActive = false). An activationToken (random hex string) and activationExpiresAt (24 hours) are generated and saved on the user record. The service returns a success message and emits a placeholder event so an external notification service (email/SMS) can deliver the token.
 
-Security: Passwords are hashed using Bcrypt.
+Endpoints (Auth service)
 
-Persistence: User data is stored in the ms-auth-db (MySQL).
+- POST /signup
+  - Body: RegisterUserDto
+  - Behaviour: creates an inactive user, generates activationToken and activationExpiresAt, returns a message indicating activation is required. The activation token should be delivered to the user via an external notification (email/SMS).
+
+- POST /activate
+  - Body: { healthId: string, token: string }
+  - Behaviour: validates the token and expiry for the provided healthId and, on success, activates the user (sets isActive = true and clears the activation fields).
 
 #### Sign-In
 
-Multi-Identifier Input: Users can log in using Email, Phone, or Health ID.
+- Multi-Identifier Input: Users can log in using any of Email, Phone Number, or Health ID.
+- Normalization rules (implemented in LoginUserDto and used by the service):
+  - Email: trimmed and lowercased before lookup.
+  - Phone number: trimmed before lookup.
+  - Health ID: trimmed and uppercased before lookup.
 
-Normalization: Inputs are trimmed and transformed to uppercase/lowercase via class-transformer to ensure matching.
+These normalization rules ensure consistent lookups across registrations and logins.
 
-JWT Issuance: Upon successful login, the Auth Service issues a JWT containing:
+Authentication tokens
 
-sub: User UUID
+- JWT payload contains: sub (user UUID), healthId, role, email, phoneNumber.
+- Access token: expires in 15 minutes (used to access protected APIs).
+- Refresh token: expires in 7 days. Recommendation: persist refresh tokens or use rotating refresh tokens to support revocation.
 
-healthId: The prefixed ID
+Notes on Activation token
 
-role: (Patient, Doctor, or Admin)
+- Activation tokens are generated with crypto.randomBytes and stored on the user record with a 24-hour expiry.
+- The service includes a placeholder to emit a 'user.pending_activation' event when a user signs up. Integrate this with an email/SMS delivery service or an event bus for production use.
 
 ### 3. Cross-Service Communication
 
@@ -140,36 +157,41 @@ The Auth Service is the Identity Provider (IdP) for other microservices. Communi
 
 #### A. Synchronous (Internal API Gateway / Traefik)
 
-When a user tries to book an appointment:
-
-Request: GET /appointments hits the Appointment Service.
-
-Authorization: The Appointment Service extracts the JWT and verifies the signature (using a shared secret or public key).
-
-Context: The service uses the healthId from the token to filter data (e.g., a Patient only sees their own appointments).
+- When a request hits downstream services, the service extracts and verifies the JWT signature (shared secret or public key).
+- Downstream services should use the healthId and role from the token to apply authorization rules and filter data.
 
 #### B. Asynchronous (Event-Driven)
 
-When a new Patient is created in the Auth Service:
-
-Event: user.registered is emitted.
-
-Consumer: The Patient Service listens and automatically creates a blank "Medical Ledger" or "Electronic Health Record (EHR)" profile for that specific healthId.
+- On user creation the Auth Service emits events (placeholder name: user.registered / user.pending_activation). Consumers such as the Patient Service can react to create EHR records or send notifications.
 
 ### 4. Security & Data Integrity
 
-Input Protection: Strict Regex validation on Health IDs to prevent injection.
-
-Rate Limiting: Integrated at the Traefik level to prevent brute-force attacks on login.
-
-Audit Trail: Every login attempt is logged (visible in Docker logs) to track unauthorized access to the healthcare platform.
+- Input Protection: Health IDs and credentials are validated with strict regexes to prevent injection and malformed IDs.
+- Rate Limiting: Traefik-level rate limiting is recommended to protect login and activation endpoints from brute-force attacks. Consider adding server-side rate limiting (NestJS Throttler) for defense in depth.
+- Audit Trail: Authentication attempts (successful and failed) should be logged. The container logs are a basic audit trail; for production use push audit logs to a centralized logging system.
+- Token Revocation: The service currently issues stateless JWTs. For immediate revocation support consider storing refresh tokens or maintaining a revocation list.
 
 ### 5. Development Workflow (Docker)
 
-This project uses Docker Compose for a "Hot-Reload" environment:
+This project uses Docker Compose for a "Hot-Reload" environment. Key points:
 
-Watch Mode: The ms-auth-api uses a Bind Mount to sync code from the Windows host to the Linux container.
+- Dev build: docker-compose targets the `base` stage so the service runs with a bind mount and watch mode for fast feedback.
+- Startup sequence: docker-compose runs a wait-for script to ensure the database is reachable, runs migrations (db-migrate up -e dev) and starts NestJS in watch mode.
+- Environment: Provide environment variables via a .env file (example keys required: MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE, JWT_SECRET).
+- Commands:
+  - Local dev: pnpm install; make start (uses docker-compose up -d)
+  - Build release: make build-release (uses the Makefile to build the `release` Docker image)
+  - Run migrations: make migrate (executes db-migrate inside the container)
 
-Environment: Managed via database.env (Ignored in Git for security).
+Testing & Building
 
-Migrations: Managed via db-migrate to ensure the users table stays consistent across all developer machines.
+- Use pnpm run build to compile TypeScript into dist/ (required by the production Docker image).
+- Run tests with pnpm run test (unit) and pnpm run test:e2e for E2E tests.
+
+Deployment notes
+
+- Keep TypeORM synchronize = false in production (migrations are used).
+- Secure JWT_SECRET and database credentials using a secrets manager in production.
+- Consider adding centralized logging and monitoring for auditability and alerting.
+
+If you update the code that affects the behavior documented above (for example token lifetimes, endpoint names, or payload contents), update this README accordingly so future maintainers have a single source of truth.

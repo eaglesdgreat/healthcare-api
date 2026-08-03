@@ -50,6 +50,9 @@ export class AuthService {
       // 3. Generate tracking and validation metadata
       const healthId = await this.usersService.generateHealthId(role)
       // const activationToken = Math.random().toString(36).substring(2, 15) // or crypto.randomBytes
+      const activationToken = require('crypto')
+        .randomBytes(24)
+        .toString('hex')
       const activationExpiresAt = new Date()
       activationExpiresAt.setHours(activationExpiresAt.getHours() + 24) // 24-hour expiration window
 
@@ -63,6 +66,8 @@ export class AuthService {
         role,
         healthId,
         isActive: false,
+        activationToken,
+        activationExpiresAt,
       } as DeepPartial<User>)
 
       // Ideally update schema definition later to allow NULL values on gender/DOB fields
@@ -70,12 +75,13 @@ export class AuthService {
 
       await this.usersRepository.save(newUser)
 
-      // 5. TODO: Emit 'user.pending_activation' event for ms-notification-service
+      // 5. Emit a pending activation event for external consumers (e.g., notification service)
+      // This is a placeholder for integration with an event bus or notification service.
       // this.eventEmitter.emit('user.pending_activation', { email, activationToken, healthId })
 
       return {
         message:
-          'Registration successful. Please check your contact method to activate your health profile.',
+          'Registration successful. Activation token has been sent to the provided contact method. Use it to activate your account.',
       }
     } catch (error) {
       console.error(error)
@@ -152,5 +158,49 @@ export class AuthService {
     const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' })
 
     return { accessToken, refreshToken }
+  }
+
+  async activate(healthId: string, token: string): Promise<{ message: string }>{
+    try {
+      const user = await this.usersRepository.findOne({
+        where: { healthId },
+        select: [
+          'id',
+          'healthId',
+          'activationToken',
+          'activationExpiresAt',
+          'isActive',
+        ],
+      })
+
+      if (!user) {
+        throw new UnauthorizedException('Invalid activation details')
+      }
+
+      if (user.isActive) {
+        return { message: 'Account already activated' }
+      }
+
+      if (!user.activationToken || user.activationToken !== token) {
+        throw new UnauthorizedException('Invalid or expired activation token')
+      }
+
+      if (user.activationExpiresAt && new Date() > new Date(user.activationExpiresAt)) {
+        throw new UnauthorizedException('Activation token has expired')
+      }
+
+      // Activate the user
+      await this.usersRepository.update(user.id, {
+        isActive: true,
+        activationToken: null,
+        activationExpiresAt: null,
+      } as DeepPartial<User>)
+
+      return { message: 'Account activated successfully' }
+    } catch (error) {
+      console.error(error)
+      if (error instanceof Error) throw error
+      throw new InternalServerErrorException('Failed to activate account')
+    }
   }
 }

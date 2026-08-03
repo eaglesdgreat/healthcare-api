@@ -30,7 +30,21 @@ export class IsUsernameValidConstraint implements ValidatorConstraintInterface {
 
 export class LoginUserDto {
   @IsString()
-  @Transform(({ value }: { value: string }) => value?.toUpperCase()?.trim())
+  @Transform(({ value }: { value: string }) => {
+    if (typeof value !== 'string') return value
+
+    const trimmed = value.trim()
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    const phoneRegex = /^\+?[0-9]{10,15}$/
+    const healthIdRegex = /^(PAT|HOS|DOC)-[A-Z0-9]{8,12}$/i
+
+    if (emailRegex.test(trimmed)) return trimmed.toLowerCase()
+    if (phoneRegex.test(trimmed)) return trimmed
+    if (healthIdRegex.test(trimmed)) return trimmed.toUpperCase()
+
+    // default: return trimmed
+    return trimmed
+  })
   @Validate(IsUsernameValidConstraint)
   username: string
 
