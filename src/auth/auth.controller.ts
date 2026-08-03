@@ -17,4 +17,10 @@ export class AuthController {
   async login(@Body() loginUserDto: LoginUserDto) {
     return await this.authService.login(loginUserDto)
   }
+
+  @Post('activate')
+  async activate(@Body() body: { healthId: string; token: string }) {
+    return await this.authService.activate(body.healthId, body.token)
+  }
 }
+
