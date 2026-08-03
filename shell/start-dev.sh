@@ -1,5 +1,9 @@
 #!/bin/sh
 export NODE_ENV=dev
+# Ensure file watchers use polling mode inside the container (helps with Windows bind mounts)
+export CHOKIDAR_USEPOLLING=true
+export CHOKIDAR_INTERVAL=1000
+export WATCHPACK_POLLING=true
 export PORT=5501
 
 echo "Running database migrations..."

@@ -9,7 +9,7 @@ services:
       context: .
       target: base # Targets the first stage of the Dockerfile for dev
     volumes:
-      - ./:/app
+      - ./:/app:cached
       # The "Volume Trick": prevents local node_modules from overwriting container ones
       - /app/node_modules
     ports:
@@ -21,6 +21,10 @@ services:
     environment:
       - NODE_ENV=dev
       - PORT=5501
+      # Use polling for file-watchers (helps on Windows hosts with Docker bind mounts)
+      - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=1000
+      - WATCHPACK_POLLING=true
     # Using your wait-for pattern to ensure DB is ready before Nest starts
     command: >
       sh -c "./shell/wait-for.sh ms-auth-db:3306 -- sh ./shell/start-dev.sh"

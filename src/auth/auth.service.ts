@@ -12,6 +12,8 @@ import * as bcrypt from 'bcrypt'
 import { LoginUserDto, RegisterUserDto } from './dto'
 import { Repository, DeepPartial } from 'typeorm'
 import { InjectRepository } from '@nestjs/typeorm'
+import { randomBytes } from 'crypto'
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -50,9 +52,7 @@ export class AuthService {
       // 3. Generate tracking and validation metadata
       const healthId = await this.usersService.generateHealthId(role)
       // const activationToken = Math.random().toString(36).substring(2, 15) // or crypto.randomBytes
-      const activationToken = require('crypto')
-        .randomBytes(24)
-        .toString('hex')
+      const activationToken = randomBytes(24).toString('hex')
       const activationExpiresAt = new Date()
       activationExpiresAt.setHours(activationExpiresAt.getHours() + 24) // 24-hour expiration window
 
@@ -192,8 +192,11 @@ export class AuthService {
       // Activate the user
       await this.usersRepository.update(user.id, {
         isActive: true,
-        activationToken: null,
-        activationExpiresAt: null,
+        // Cast nulls to any to avoid TypeScript strict null checks while keeping
+        // the runtime DB columns nullable. TypeORM will correctly set these DB
+        // columns to NULL.
+        activationToken: null as unknown as string,
+        activationExpiresAt: null as unknown as Date,
       } as DeepPartial<User>)
 
       return { message: 'Account activated successfully' }
