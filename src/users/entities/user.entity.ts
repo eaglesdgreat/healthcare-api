@@ -58,8 +58,8 @@ export class User {
   @Column({ name: 'is_active', default: false })
   isActive: boolean
 
-  @Column({ name: 'activation_token', nullable: true, select: false })
-  activationToken: string | null
+  @Column({ name: 'activation_token', type: 'varchar', length: 128, nullable: true, select: false })
+  activationToken: string
 
   @Column({
     name: 'activation_expires_at',
@@ -67,7 +67,7 @@ export class User {
     nullable: true,
     select: false,
   })
-  activationExpiresAt: Date | null
+  activationExpiresAt: Date
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date
