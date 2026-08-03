@@ -4,7 +4,9 @@ TIMEOUT=15
 QUIET=0
 
 echoerr() {
-  if [ "$QUIET" -ne 1 ]; then printf "%s\n" "$*" 1>&2; fi
+  if [ "$QUIET" -ne 1 ]; then
+    printf "%s\n" "$*" 1>&2
+  fi
 }
 
 usage() {
@@ -22,7 +24,6 @@ USAGE
 wait_for() {
   for i in `seq $TIMEOUT` ; do
     nc -z "$HOST" "$PORT" > /dev/null 2>&1
-    
     result=$?
     if [ $result -eq 0 ] ; then
       if [ $# -gt 0 ] ; then
@@ -40,38 +41,40 @@ while [ $# -gt 0 ]
 do
   case "$1" in
     *:* )
-    HOST=$(printf "%s\n" "$1"| cut -d : -f 1)
-    PORT=$(printf "%s\n" "$1"| cut -d : -f 2)
-    shift 1
-    ;;
+      HOST=$(printf "%s\n" "$1" | cut -d : -f 1)
+      PORT=$(printf "%s\n" "$1" | cut -d : -f 2)
+      shift 1
+      ;;
     -q | --quiet)
-    QUIET=1
-    shift 1
-    ;;
+      QUIET=1
+      shift 1
+      ;;
     -t)
-    TIMEOUT="$2"
-    if [ "$TIMEOUT" = "" ]; then break; fi
-    shift 2
-    ;;
+      TIMEOUT="$2"
+      if [ "$TIMEOUT" = "" ]; then
+        break
+      fi
+      shift 2
+      ;;
     --timeout=*)
-    TIMEOUT="${1#*=}"
-    shift 1
-    ;;
+      TIMEOUT="${1#*=}"
+      shift 1
+      ;;
     --)
-    shift
-    break
-    ;;
+      shift
+      break
+      ;;
     --help)
-    usage 0
-    ;;
+      usage 0
+      ;;
     *)
-    echoerr "Unknown argument: $1"
-    usage 1
-    ;;
+      echoerr "Unknown argument: $1"
+      usage 1
+      ;;
   esac
 done
 
-if [ "$HOST" = "" -o "$PORT" = "" ]; then
+if [ "$HOST" = "" ] || [ "$PORT" = "" ]; then
   echoerr "Error: you need to provide a host and port to test."
   usage 2
 fi
