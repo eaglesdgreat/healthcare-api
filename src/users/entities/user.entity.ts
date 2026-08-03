@@ -58,12 +58,11 @@ export class User {
   @Column({ name: 'is_active', default: false })
   isActive: boolean
 
-  @Column({ name: 'activation_token', type: 'varchar', length: 128, nullable: true, select: false })
+  @Column('varchar', { name: 'activation_token', length: 128, nullable: true, select: false })
   activationToken: string
 
-  @Column({
+  @Column('timestamp', {
     name: 'activation_expires_at',
-    type: 'timestamp',
     nullable: true,
     select: false,
   })
