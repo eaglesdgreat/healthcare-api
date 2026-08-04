@@ -1,5 +1,5 @@
 # Stage 1: Base & Dependencies
-FROM node:20-slim AS base
+FROM node:22-slim AS base
 
 # Install netcat (nc) for the wait-for.sh script and procps for cleanup
 RUN apt-get update && apt-get install -y \
@@ -33,7 +33,7 @@ RUN pnpm build
 RUN pnpm prune --prod
 
 # Stage 3: Production Release (The "Slim" Runner)
-FROM node:20-slim AS release
+FROM node:22-slim AS release
 
 # Install netcat in release too if you run migrations there
 RUN apt-get update && apt-get install -y netcat-openbsd && rm -rf /var/lib/apt/lists/*
