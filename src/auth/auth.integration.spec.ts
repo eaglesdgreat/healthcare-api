@@ -8,36 +8,24 @@ import { Repository } from 'typeorm'
 import { getRepositoryToken } from '@nestjs/typeorm'
 import { UserRole } from '@/users/entities/user.entity'
 
-describe('Auth Integration (sqlite)', () => {
+describe('Auth Integration (mysql)', () => {
   let module: TestingModule
   let authService: AuthService
   let usersRepo: Repository<User>
 
   beforeAll(async () => {
-    // Support running against either sqlite in-memory (default) or the
-    // docker-compose MySQL instance. CI can set USE_MYSQL=true and provide
-    // MYSQL_* env vars to run integration tests against MySQL.
-    const useMysql = process.env.USE_MYSQL === 'true'
-
-    const dbConfig = useMysql
-      ? {
-          type: 'mysql' as const,
-          host: process.env.MYSQL_HOST || '127.0.0.1',
-          port: Number(process.env.MYSQL_PORT) || 3306,
-          username: process.env.MYSQL_USER || 'root',
-          password: process.env.MYSQL_PASSWORD || 'password',
-          database: process.env.MYSQL_DATABASE || 'test',
-          entities: [User],
-          synchronize: true,
-          dropSchema: true,
-        }
-      : {
-          type: 'sqlite' as const,
-          database: ':memory:',
-          dropSchema: true,
-          entities: [User],
-          synchronize: true,
-        }
+    // Integration tests run against the project's MySQL instance.
+    const dbConfig = {
+      type: 'mysql' as const,
+      host: process.env.MYSQL_HOST || '127.0.0.1',
+      port: Number(process.env.MYSQL_PORT) || 3306,
+      username: process.env.MYSQL_USER || 'root',
+      password: process.env.MYSQL_PASSWORD || 'verysecretsomething',
+      database: process.env.MYSQL_DATABASE || 'ms_auth_test',
+      entities: [User],
+      synchronize: true,
+      dropSchema: true,
+    }
 
     module = await Test.createTestingModule({
       imports: [TypeOrmModule.forRoot(dbConfig), UsersModule, AuthModule],
