@@ -14,18 +14,33 @@ describe('Auth Integration (sqlite)', () => {
   let usersRepo: Repository<User>
 
   beforeAll(async () => {
-    module = await Test.createTestingModule({
-      imports: [
-        TypeOrmModule.forRoot({
-          type: 'sqlite',
+    // Support running against either sqlite in-memory (default) or the
+    // docker-compose MySQL instance. CI can set USE_MYSQL=true and provide
+    // MYSQL_* env vars to run integration tests against MySQL.
+    const useMysql = process.env.USE_MYSQL === 'true'
+
+    const dbConfig = useMysql
+      ? {
+          type: 'mysql' as const,
+          host: process.env.MYSQL_HOST || '127.0.0.1',
+          port: Number(process.env.MYSQL_PORT) || 3306,
+          username: process.env.MYSQL_USER || 'root',
+          password: process.env.MYSQL_PASSWORD || 'password',
+          database: process.env.MYSQL_DATABASE || 'test',
+          entities: [User],
+          synchronize: true,
+          dropSchema: true,
+        }
+      : {
+          type: 'sqlite' as const,
           database: ':memory:',
           dropSchema: true,
           entities: [User],
           synchronize: true,
-        }),
-        UsersModule,
-        AuthModule,
-      ],
+        }
+
+    module = await Test.createTestingModule({
+      imports: [TypeOrmModule.forRoot(dbConfig), UsersModule, AuthModule],
     }).compile()
 
     authService = module.get<AuthService>(AuthService)

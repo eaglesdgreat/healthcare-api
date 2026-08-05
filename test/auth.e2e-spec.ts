@@ -10,17 +10,32 @@ describe('Auth E2E (sqlite)', () => {
   let moduleFixture: TestingModule
 
   beforeAll(async () => {
-    moduleFixture = await Test.createTestingModule({
-      imports: [
-        TypeOrmModule.forRoot({
-          type: 'sqlite',
+    // Allow tests to run against MySQL via CI by setting USE_MYSQL=true and
+    // providing MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE.
+    const useMysql = process.env.USE_MYSQL === 'true'
+
+    const dbConfig = useMysql
+      ? {
+          type: 'mysql' as const,
+          host: process.env.MYSQL_HOST || '127.0.0.1',
+          port: Number(process.env.MYSQL_PORT) || 3306,
+          username: process.env.MYSQL_USER || 'root',
+          password: process.env.MYSQL_PASSWORD || 'password',
+          database: process.env.MYSQL_DATABASE || 'test',
+          entities: [User],
+          synchronize: true,
+          dropSchema: true,
+        }
+      : {
+          type: 'sqlite' as const,
           database: ':memory:',
           dropSchema: true,
           entities: [User],
           synchronize: true,
-        }),
-        AppModule,
-      ],
+        }
+
+    moduleFixture = await Test.createTestingModule({
+      imports: [TypeOrmModule.forRoot(dbConfig), AppModule],
     }).compile()
 
     app = moduleFixture.createNestApplication()
