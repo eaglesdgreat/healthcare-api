@@ -5,34 +5,24 @@ import { TypeOrmModule } from '@nestjs/typeorm'
 import { AppModule } from './../src/app.module'
 import { User } from '@/users/entities/user.entity'
 
-describe('Auth E2E (sqlite)', () => {
+describe('Auth E2E (mysql)', () => {
   let app: INestApplication
   let moduleFixture: TestingModule
 
   beforeAll(async () => {
-    // Allow tests to run against MySQL via CI by setting USE_MYSQL=true and
-    // providing MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE.
-    const useMysql = process.env.USE_MYSQL === 'true'
+    // E2E tests run against the project's MySQL instance (CI provides a service).
 
-    const dbConfig = useMysql
-      ? {
-          type: 'mysql' as const,
-          host: process.env.MYSQL_HOST || '127.0.0.1',
-          port: Number(process.env.MYSQL_PORT) || 3306,
-          username: process.env.MYSQL_USER || 'root',
-          password: process.env.MYSQL_PASSWORD || 'password',
-          database: process.env.MYSQL_DATABASE || 'test',
-          entities: [User],
-          synchronize: true,
-          dropSchema: true,
-        }
-      : {
-          type: 'sqlite' as const,
-          database: ':memory:',
-          dropSchema: true,
-          entities: [User],
-          synchronize: true,
-        }
+    const dbConfig = {
+      type: 'mysql' as const,
+      host: process.env.MYSQL_HOST || '127.0.0.1',
+      port: Number(process.env.MYSQL_PORT) || 3306,
+      username: process.env.MYSQL_USER || 'root',
+      password: process.env.MYSQL_PASSWORD || 'verysecretsomething',
+      database: process.env.MYSQL_DATABASE || 'ms_auth_test',
+      entities: [User],
+      synchronize: true,
+      dropSchema: true,
+    }
 
     moduleFixture = await Test.createTestingModule({
       imports: [TypeOrmModule.forRoot(dbConfig), AppModule],
