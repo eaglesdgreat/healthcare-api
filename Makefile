@@ -85,6 +85,13 @@ test: start test-exec
 test-exec:
 	docker-compose -p ${project} exec ${service}-api pnpm test -- --exit
 
+.PHONY: test-mysql
+test-mysql: start test-mysql-exec
+
+.PHONY: test-mysql-exec
+test-mysql-exec:
+	docker-compose -p ${project} exec -e USE_MYSQL=true ${service}-api sh -c "pnpm run test:integration -- --runInBand --detectOpenHandles"
+
 .PHONY: lint-fix
 lint-fix: start
 	docker-compose -p ${project} exec ${service}-api pnpm lint:fix

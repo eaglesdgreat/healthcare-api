@@ -17,6 +17,8 @@
     "migrate:down": "db-migrate down",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
+    "test:unit": "jest --runInBand --testPathPattern=\\.spec\\.ts$ --testPathIgnorePatterns=\\.integration\\.spec\\.ts$ --testPathIgnorePatterns=test/",
+    "test:integration": "jest --runInBand --testPathPattern=\\.integration\\.spec\\.ts$",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",

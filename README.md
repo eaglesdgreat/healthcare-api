@@ -46,15 +46,26 @@ $ pnpm run start:prod
 
 ## Run tests
 
+Integration and end-to-end tests use MySQL. Make sure your local database is running before you run the integration or e2e commands.
+
 ```bash
 # unit tests
-$ pnpm run test
+$ pnpm run test:unit
+
+# integration tests
+$ pnpm run test:integration
 
 # e2e tests
 $ pnpm run test:e2e
 
 # test coverage
 $ pnpm run test:cov
+```
+
+### Run tests locally against MySQL
+
+```bash
+$ make test-mysql
 ```
 
 ## Deployment

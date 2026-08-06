@@ -102,6 +102,23 @@ describe('AuthService', () => {
     expect(res.meta).toHaveProperty('refreshToken')
   })
 
+  it('should reject login when the user is inactive', async () => {
+    const password = 'Password1!'
+    const hashed = await bcrypt.hash(password, 10)
+    ;(mockUsersService.findUserByUsername as jest.Mock).mockResolvedValue({
+      id: 'uuid',
+      email: 'u@example.com',
+      password: hashed,
+      isActive: false,
+      role: UserRole.PATIENT,
+      healthId: 'PAT-ABCDEFGH',
+    })
+
+    await expect(
+      service.login({ username: 'u@example.com', password }),
+    ).rejects.toThrow()
+  })
+
   it('should activate account with valid token', async () => {
     const repo = (service as any).usersRepository
     repo.findOne.mockResolvedValue({
@@ -116,5 +133,19 @@ describe('AuthService', () => {
       message: 'Account activated successfully',
     })
     expect(repo.update).toHaveBeenCalled()
+  })
+
+  it('should reject account activation with an expired token', async () => {
+    const repo = (service as any).usersRepository
+    repo.findOne.mockResolvedValue({
+      id: 'uuid',
+      healthId: 'PAT-ABC',
+      activationToken: 'token123',
+      activationExpiresAt: new Date(Date.now() - 1000 * 60 * 60),
+      isActive: false,
+    })
+
+    await expect(service.activate('PAT-ABC', 'token123')).rejects.toThrow()
+    expect(repo.update).not.toHaveBeenCalled()
   })
 })
