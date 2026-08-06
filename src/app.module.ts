@@ -25,7 +25,7 @@ import { HttpExceptionFilter } from '@/common/filters/http-exception.filter'
         database: configService.get('MYSQL_DATABASE'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         synchronize: false, // Set to false in production!
-        migrations: [__dirname + '/migrations/*{.ts,.js}'],
+        migrations: [__dirname + '/../migrations/*{.ts,.js}'],
         migrationsRun: true,
         cli: {
           migrationsDir: '/migrations',
