@@ -114,11 +114,16 @@ jobs:
           for i in {1..30}; do
             if mysqladmin ping -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" >/dev/null 2>&1; then
               echo "MySQL is up"
+              mysql_ready=true
               break
             fi
             echo "MySQL not ready yet, sleeping..."
             sleep 2
           done
+          if [ "$mysql_ready" != "true" ]; then
+            echo "MySQL did not become healthy in time"
+            exit 1
+          fi
 
       - name: Run integration tests
         run: pnpm run test:integration -- --detectOpenHandles
@@ -174,11 +179,16 @@ jobs:
           for i in {1..30}; do
             if mysqladmin ping -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" >/dev/null 2>&1; then
               echo "MySQL is up"
+              mysql_ready=true
               break
             fi
             echo "MySQL not ready yet, sleeping..."
             sleep 2
           done
+          if [ "$mysql_ready" != "true" ]; then
+            echo "MySQL did not become healthy in time"
+            exit 1
+          fi
 
       - name: Run e2e tests
         run: pnpm run test:e2e -- --detectOpenHandles
@@ -259,10 +269,15 @@ jobs:
           for i in $(seq 1 30); do
             if curl -sSf http://127.0.0.1:5501/ >/dev/null 2>&1; then
               echo "App is responding"
+              app_ready=true
               break
             fi
             sleep 2
           done
+          if [ "$app_ready" != "true" ]; then
+            echo "Release container never became ready"
+            exit 1
+          fi
           status=$(curl -s -o /tmp/signup.json -w '%{http_code}' -X POST http://127.0.0.1:5501/signup -H 'Content-Type: application/json' -d '{"firstName":"ci","lastName":"smoke","email":"ci-smoke@example.com","phoneNumber":"+12345678901","role":"PATIENT","password":"Abcd1234!"}')
           if [ "$status" != "201" ]; then cat /tmp/signup.json; exit 1; fi
           row=$(mysql -h127.0.0.1 -P3306 -uroot -pverysecretsomething -D ms_auth_test -se "SELECT health_id, activation_token FROM users WHERE email='ci-smoke@example.com';")
