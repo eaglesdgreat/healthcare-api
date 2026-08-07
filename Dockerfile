@@ -15,7 +15,7 @@ RUN corepack enable
 WORKDIR /app
 
 # Copy configuration files first to leverage Docker cache
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Install ALL dependencies (including devDeps for building/testing)
 RUN pnpm install --frozen-lockfile

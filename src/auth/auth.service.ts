@@ -4,31 +4,40 @@ import {
   UnauthorizedException,
   ForbiddenException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { UsersService } from '@/users/users.service'
-import { User } from '@/users/entities/user.entity'
+import { User, UserRole } from '@/users/entities/user.entity'
+import { EventBusService } from '@/common/event-bus.service'
 import * as bcrypt from 'bcrypt'
 import { LoginUserDto, RegisterUserDto } from './dto'
 import { Repository, DeepPartial } from 'typeorm'
 import { InjectRepository } from '@nestjs/typeorm'
-import { randomBytes } from 'crypto'
+import { randomBytes, createHash } from 'crypto'
+import { RefreshToken } from './entities/refresh-token.entity'
+import { GoogleAuthService } from './google-auth.service'
+import { GoogleSignInDto } from './dto/google-signin.dto'
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
-    private jwtService: JwtService,
+    private readonly jwtService: JwtService,
+    private readonly eventBus: EventBusService,
+    private readonly googleAuthService: GoogleAuthService,
 
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+
+    @InjectRepository(RefreshToken)
+    private readonly refreshTokenRepository: Repository<RefreshToken>,
   ) {}
 
   async signup(registerDto: RegisterUserDto): Promise<{ message: string }> {
     const { email, phoneNumber, password, firstName, lastName, role } =
       registerDto
 
-    // 1. Verify uniqueness using the OR logic path
     const existingUser = await this.usersRepository.findOne({
       where: [{ email }, { phoneNumber }],
     })
@@ -45,18 +54,15 @@ export class AuthService {
     }
 
     try {
-      // 2. Hash Password securely
       const salt = await bcrypt.genSalt(12)
       const passwordHash = await bcrypt.hash(password, salt)
 
-      // 3. Generate tracking and validation metadata
       const healthId = await this.usersService.generateHealthId(role)
-      // const activationToken = Math.random().toString(36).substring(2, 15) // or crypto.randomBytes
       const activationToken = randomBytes(24).toString('hex')
+      const activationTokenHash = this.hashValue(activationToken)
       const activationExpiresAt = new Date()
-      activationExpiresAt.setHours(activationExpiresAt.getHours() + 24) // 24-hour expiration window
+      activationExpiresAt.setHours(activationExpiresAt.getHours() + 24)
 
-      // 4. Instantiate the user entity inside database context boundaries
       const newUser = this.usersRepository.create({
         firstName,
         lastName,
@@ -66,18 +72,20 @@ export class AuthService {
         role,
         healthId,
         isActive: false,
-        activationToken,
+        activationTokenHash,
         activationExpiresAt,
       } as DeepPartial<User>)
 
-      // Ideally update schema definition later to allow NULL values on gender/DOB fields
-      // if you don't want to enforce these placeholders.
-
       await this.usersRepository.save(newUser)
 
-      // 5. Emit a pending activation event for external consumers (e.g., notification service)
-      // This is a placeholder for integration with an event bus or notification service.
-      // this.eventEmitter.emit('user.pending_activation', { email, activationToken, healthId })
+      this.eventBus.emit('user.pending_activation', {
+        email,
+        phoneNumber,
+        healthId,
+        activationToken,
+        activationExpiresAt: activationExpiresAt.toISOString(),
+        role,
+      })
 
       return {
         message:
@@ -101,7 +109,7 @@ export class AuthService {
       const user = await this.usersService.findUserByUsername(username)
 
       if (user) {
-        if (!(await this.verifyPassword(user, password, user?.password))) {
+        if (!user.password || !(await this.verifyPassword(user, password))) {
           throw new UnauthorizedException('Invalid credentials')
         }
 
@@ -109,8 +117,7 @@ export class AuthService {
           throw new ForbiddenException('Account not activated')
         }
 
-        // Generate JWT Token
-        const { accessToken, refreshToken } = this.generateJWTToken(user)
+        const { accessToken, refreshToken } = await this.generateTokens(user)
         const { password: _password, ...userResponse } = user
         void _password
 
@@ -133,19 +140,150 @@ export class AuthService {
     }
   }
 
-  private hashPassword(password: string) {
-    return bcrypt.hashSync(password, 10)
+  async googleSignIn(googleSignInDto: GoogleSignInDto) {
+    const { idToken, role } = googleSignInDto
+    const payload = (await this.googleAuthService.verifyIdToken(idToken)) as {
+      email?: string
+      email_verified?: boolean
+      given_name?: string
+      family_name?: string
+      phone_number?: string
+    }
+    const email = payload.email
+
+    if (!email) {
+      throw new BadRequestException(
+        'Google token did not include a verified email',
+      )
+    }
+    if (payload.email_verified === false) {
+      throw new UnauthorizedException('Google email has not been verified')
+    }
+
+    const user = await this.usersService.findUserByUsername(email)
+
+    if (user) {
+      if (!user.isActive) {
+        throw new ForbiddenException('Account not activated')
+      }
+      const { accessToken, refreshToken } = await this.generateTokens(user)
+      const { password: _password, ...userResponse } = user
+      void _password
+      return {
+        data: userResponse,
+        meta: {
+          accessToken,
+          refreshToken,
+        },
+      }
+    }
+
+    const assignedRole = role || UserRole.PATIENT
+    const healthId = await this.usersService.generateHealthId(assignedRole)
+    const activationToken = randomBytes(24).toString('hex')
+    const activationTokenHash = this.hashValue(activationToken)
+    const activationExpiresAt = new Date()
+    activationExpiresAt.setHours(activationExpiresAt.getHours() + 24)
+
+    const newUser = this.usersRepository.create({
+      firstName: payload.given_name || '',
+      lastName: payload.family_name || '',
+      email,
+      phoneNumber: payload.phone_number || '',
+      password: null,
+      role: assignedRole,
+      healthId,
+      isActive: false,
+      activationTokenHash,
+      activationExpiresAt,
+    } as DeepPartial<User>)
+
+    await this.usersRepository.save(newUser)
+    this.eventBus.emit('user.pending_activation', {
+      email,
+      phoneNumber: payload.phone_number || null,
+      healthId,
+      activationToken,
+      activationExpiresAt: activationExpiresAt.toISOString(),
+      role: assignedRole,
+      source: 'google',
+    })
+
+    return {
+      message:
+        'Google login succeeded. A pending activation event was emitted so the account can be activated before first use.',
+    }
   }
 
-  private async verifyPassword(
-    user: User,
-    password: string,
-    hashedPassword: string,
-  ) {
-    return user && (await bcrypt.compare(password, hashedPassword))
+  async refresh(refreshToken: string) {
+    if (!refreshToken) {
+      throw new BadRequestException('Refresh token must be provided')
+    }
+
+    try {
+      const payload = await this.jwtService.verifyAsync(refreshToken)
+
+      const tokenHash = this.hashValue(refreshToken)
+      const storedToken = await this.refreshTokenRepository.findOne({
+        where: { token: tokenHash, revoked: false },
+      })
+
+      if (!storedToken || storedToken.expiresAt < new Date()) {
+        throw new UnauthorizedException('Invalid or expired refresh token')
+      }
+
+      const user = await this.usersRepository.findOne({
+        where: { id: storedToken.userId },
+      })
+
+      if (!user || !user.isActive) {
+        throw new UnauthorizedException('Invalid refresh token')
+      }
+
+      storedToken.revoked = true
+      await this.refreshTokenRepository.save(storedToken)
+
+      const tokens = await this.generateTokens(user)
+      return tokens
+    } catch (error) {
+      console.error(error)
+      if (
+        error instanceof UnauthorizedException ||
+        error instanceof BadRequestException
+      ) {
+        throw error
+      }
+      throw new InternalServerErrorException(
+        'Failed to refresh authentication tokens',
+      )
+    }
   }
 
-  private generateJWTToken(user: User) {
+  async logout(refreshToken: string) {
+    if (!refreshToken) {
+      throw new BadRequestException('Refresh token must be provided')
+    }
+
+    const tokenHash = this.hashValue(refreshToken)
+    const storedToken = await this.refreshTokenRepository.findOne({
+      where: { token: tokenHash, revoked: false },
+    })
+
+    if (storedToken) {
+      storedToken.revoked = true
+      await this.refreshTokenRepository.save(storedToken)
+    }
+
+    return { message: 'Refresh token revoked' }
+  }
+
+  private async verifyPassword(user: User, password: string) {
+    return (
+      user && user.password && (await bcrypt.compare(password, user.password))
+    )
+  }
+
+  private async generateTokens(user: User) {
     const payload = {
       sub: user?.id,
       email: user?.email,
@@ -156,18 +294,35 @@ export class AuthService {
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' })
     const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' })
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    const refreshTokenHash = this.hashValue(refreshToken)
+
+    const storedToken = this.refreshTokenRepository.create({
+      userId: user.id,
+      token: refreshTokenHash,
+      revoked: false,
+      expiresAt,
+    })
+    await this.refreshTokenRepository.save(storedToken)
 
     return { accessToken, refreshToken }
   }
 
-  async activate(healthId: string, token: string): Promise<{ message: string }>{
+  private hashValue(value: string) {
+    return createHash('sha256').update(value).digest('hex')
+  }
+
+  async activate(
+    healthId: string,
+    token: string,
+  ): Promise<{ message: string }> {
     try {
       const user = await this.usersRepository.findOne({
         where: { healthId },
         select: [
           'id',
           'healthId',
-          'activationToken',
+          'activationTokenHash',
           'activationExpiresAt',
           'isActive',
         ],
@@ -181,23 +336,32 @@ export class AuthService {
         return { message: 'Account already activated' }
       }
 
-      if (!user.activationToken || user.activationToken !== token) {
+      if (
+        !user.activationTokenHash ||
+        user.activationTokenHash !== this.hashValue(token)
+      ) {
         throw new UnauthorizedException('Invalid or expired activation token')
       }
 
-      if (user.activationExpiresAt && new Date() > new Date(user.activationExpiresAt)) {
+      if (
+        user.activationExpiresAt &&
+        new Date() > new Date(user.activationExpiresAt)
+      ) {
         throw new UnauthorizedException('Activation token has expired')
       }
 
-      // Activate the user
       await this.usersRepository.update(user.id, {
         isActive: true,
-        // Cast nulls to any to avoid TypeScript strict null checks while keeping
-        // the runtime DB columns nullable. TypeORM will correctly set these DB
-        // columns to NULL.
-        activationToken: null as unknown as string,
+        activationTokenHash: null as unknown as string,
         activationExpiresAt: null as unknown as Date,
       } as DeepPartial<User>)
+
+      this.eventBus.emit('user.registered', {
+        id: user.id,
+        healthId: user.healthId,
+        email: user.email,
+        role: user.role,
+      })
 
       return { message: 'Account activated successfully' }
     } catch (error) {

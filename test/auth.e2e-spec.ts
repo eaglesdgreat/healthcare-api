@@ -4,10 +4,14 @@ import request from 'supertest'
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { AppModule } from './../src/app.module'
 import { User } from '@/users/entities/user.entity'
+import { RefreshToken } from '@/auth/entities/refresh-token.entity'
+import { EventBusService } from '@/common/event-bus.service'
 
 describe('Auth E2E (mysql)', () => {
   let app: INestApplication
   let moduleFixture: TestingModule
+
+  let eventBus: EventBusService
 
   beforeAll(async () => {
     // E2E tests run against the project's MySQL instance (CI provides a service).
@@ -19,7 +23,7 @@ describe('Auth E2E (mysql)', () => {
       username: process.env.MYSQL_USER || 'root',
       password: process.env.MYSQL_PASSWORD || 'verysecretsomething',
       database: process.env.MYSQL_DATABASE || 'ms_auth_test',
-      entities: [User],
+      entities: [User, RefreshToken],
       synchronize: true,
       dropSchema: true,
     }
@@ -29,6 +33,7 @@ describe('Auth E2E (mysql)', () => {
     }).compile()
 
     app = moduleFixture.createNestApplication()
+    eventBus = moduleFixture.get<EventBusService>(EventBusService)
     await app.init()
   })
 
@@ -48,21 +53,34 @@ describe('Auth E2E (mysql)', () => {
 
     expect(signup.status).toBe(201)
 
-    // fetch activation token from DB
-    const repo = moduleFixture.get('UserRepository') as any
-    // Fallback: query directly using TypeORM connection
-    const users = await moduleFixture.createNestApplication().then(a => a.getHttpServer()).catch(()=>null)
+    const activationTokenPromise = new Promise<string>((resolve) => {
+      eventBus.once('user.pending_activation', (payload) => {
+        resolve((payload as any).activationToken)
+      })
+    })
 
-    // Instead, request the DB via a simple GET on users? Not available. Query via TypeORM directly:
-    const connection = moduleFixture.get('DataSource')
-    const user = await connection.getRepository(User).findOne({ where: { email: 'e2e@example.com' }, select: ['id','healthId','activationToken'] })
+    const activationToken = await activationTokenPromise
+
+    const user = await moduleFixture
+      .get('DataSource')
+      .getRepository(User)
+      .findOne({
+        where: { email: 'e2e@example.com' },
+        select: ['healthId'],
+      })
     expect(user).toBeDefined()
 
-    const activate = await request(app.getHttpServer()).post('/activate').send({ healthId: user?.healthId, token: (user as any).activationToken })
+    const activate = await request(app.getHttpServer()).post('/activate').send({
+      healthId: user?.healthId,
+      token: activationToken,
+    })
     expect(activate.status).toBe(201)
 
-    const login = await request(app.getHttpServer()).post('/login').send({ username: 'e2e@example.com', password: 'Abcd1234!' })
+    const login = await request(app.getHttpServer())
+      .post('/login')
+      .send({ username: 'e2e@example.com', password: 'Abcd1234!' })
     expect(login.status).toBe(201)
     expect(login.body.meta).toHaveProperty('accessToken')
+    expect(login.body.meta).toHaveProperty('refreshToken')
   })
 })

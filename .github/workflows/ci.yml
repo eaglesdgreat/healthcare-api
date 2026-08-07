@@ -278,14 +278,14 @@ jobs:
             echo "Release container never became ready"
             exit 1
           fi
-          status=$(curl -s -o /tmp/signup.json -w '%{http_code}' -X POST http://127.0.0.1:5501/signup -H 'Content-Type: application/json' -d '{"firstName":"ci","lastName":"smoke","email":"ci-smoke@example.com","phoneNumber":"+12345678901","role":"PATIENT","password":"Abcd1234!"}')
-          if [ "$status" != "201" ]; then cat /tmp/signup.json; exit 1; fi
-          row=$(mysql -h127.0.0.1 -P3306 -uroot -pverysecretsomething -D ms_auth_test -se "SELECT health_id, activation_token FROM users WHERE email='ci-smoke@example.com';")
-          if [ -z "$row" ]; then echo "No signup record found"; exit 1; fi
-          health_id=$(echo "$row" | cut -f1)
-          token=$(echo "$row" | cut -f2)
-          activate_status=$(curl -s -o /tmp/activate.json -w '%{http_code}' -X POST http://127.0.0.1:5501/activate -H 'Content-Type: application/json' -d '{"healthId":"'$health_id'","token":"'$token'"}')
-          if [ "$activate_status" != "201" ]; then cat /tmp/activate.json; exit 1; fi
-          login_status=$(curl -s -o /tmp/login.json -w '%{http_code}' -X POST http://127.0.0.1:5501/login -H 'Content-Type: application/json' -d '{"username":"ci-smoke@example.com","password":"Abcd1234!"}')
-          if [ "$login_status" != "201" ]; then cat /tmp/login.json; exit 1; fi
-          grep -q 'accessToken' /tmp/login.json
+          # Smoke: signup creates a 201 and record is persisted
+          status=$(curl -s -o /tmp/signup.json -w '%{http_code}' -X POST http://127.0.0.1:5501/signup \
+            -H 'Content-Type: application/json' \
+            -d '{"firstName":"ci","lastName":"smoke","email":"ci-smoke@example.com","phoneNumber":"+12345678901","role":"PATIENT","password":"Abcd1234!"}')
+          echo "Signup status: $status"
+          cat /tmp/signup.json
+          if [ "$status" != "201" ]; then exit 1; fi
+          row=$(mysql -h127.0.0.1 -P3306 -uroot -pverysecretsomething -D ms_auth_test -se \
+            "SELECT health_id FROM users WHERE email='ci-smoke@example.com';")
+          if [ -z "$row" ]; then echo "No signup record found in DB"; exit 1; fi
+          echo "Smoke test passed. User created with health_id=$row"

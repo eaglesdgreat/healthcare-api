@@ -141,6 +141,18 @@ Endpoints (Auth service)
   - Body: { healthId: string, token: string }
   - Behaviour: validates the token and expiry for the provided healthId and, on success, activates the user (sets isActive = true and clears the activation fields).
 
+- POST /refresh
+  - Body: { refreshToken: string }
+  - Behaviour: validates a persisted refresh token, rotates it, and issues a new access token and refresh token.
+
+- POST /logout
+  - Body: { refreshToken: string }
+  - Behaviour: revokes the provided refresh token so it can no longer be used.
+
+- POST /google
+  - Body: GoogleSignInDto (idToken + optional role)
+  - Behaviour: verifies a Google ID token, signs in an existing active account or provisions a new inactive account and emits an activation event.
+
 #### Sign-In
 
 - Multi-Identifier Input: Users can log in using any of Email, Phone Number, or Health ID.
@@ -155,11 +167,11 @@ Authentication tokens
 
 - JWT payload contains: sub (user UUID), healthId, role, email, phoneNumber.
 - Access token: expires in 15 minutes (used to access protected APIs).
-- Refresh token: expires in 7 days. Recommendation: persist refresh tokens or use rotating refresh tokens to support revocation.
+- Refresh token: expires in 7 days and is persisted so the service can revoke or rotate refresh tokens.
 
 Notes on Activation token
 
-- Activation tokens are generated with crypto.randomBytes and stored on the user record with a 24-hour expiry.
+- Activation tokens are generated with crypto.randomBytes, hashed before storage, and stored with a 24-hour expiry.
 - The service includes a placeholder to emit a 'user.pending_activation' event when a user signs up. Integrate this with an email/SMS delivery service or an event bus for production use.
 
 ### 3. Cross-Service Communication
@@ -174,6 +186,7 @@ The Auth Service is the Identity Provider (IdP) for other microservices. Communi
 #### B. Asynchronous (Event-Driven)
 
 - On user creation the Auth Service emits events (placeholder name: user.registered / user.pending_activation). Consumers such as the Patient Service can react to create EHR records or send notifications.
+- An optional external event bus can be enabled by setting `EVENT_BUS_URL`; events will be posted to that broker URL in addition to the in-process emitter.
 
 ### 4. Security & Data Integrity
 

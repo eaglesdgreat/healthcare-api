@@ -46,8 +46,8 @@ export class User {
   @Column({ unique: true, nullable: true })
   email: string
 
-  @Column({ select: false })
-  password: string
+  @Column({ select: false, nullable: true })
+  password: string | null
 
   @Column({ name: 'health_id', length: 50 })
   healthId: string
@@ -58,15 +58,20 @@ export class User {
   @Column({ name: 'is_active', default: false })
   isActive: boolean
 
-  @Column('varchar', { name: 'activation_token', length: 128, nullable: true, select: false })
-  activationToken: string
+  @Column('varchar', {
+    name: 'activation_token',
+    length: 128,
+    nullable: true,
+    select: false,
+  })
+  activationTokenHash: string | null
 
   @Column('timestamp', {
     name: 'activation_expires_at',
     nullable: true,
     select: false,
   })
-  activationExpiresAt: Date
+  activationExpiresAt: Date | null
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date

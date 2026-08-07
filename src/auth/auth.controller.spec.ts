@@ -49,7 +49,10 @@ describe('AuthController', () => {
     mockAuthService.activate.mockResolvedValue({ message: 'activated' })
     const body = { healthId: 'PAT-ABC', token: 'tok' }
     const res = await controller.activate(body as any)
-    expect(mockAuthService.activate).toHaveBeenCalledWith(body.healthId, body.token)
+    expect(mockAuthService.activate).toHaveBeenCalledWith(
+      body.healthId,
+      body.token,
+    )
     expect(res).toEqual({ message: 'activated' })
   })
 })
