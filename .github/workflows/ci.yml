@@ -16,7 +16,8 @@ jobs:
       - name: Setup Node.js with pnpm cache
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
+          package-manager: 'pnpm'
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
@@ -45,7 +46,8 @@ jobs:
       - name: Setup Node.js with pnpm cache
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
+          package-manager: 'pnpm'
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
@@ -90,7 +92,8 @@ jobs:
       - name: Setup Node.js with pnpm cache
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
+          package-manager: 'pnpm'
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
@@ -155,7 +158,8 @@ jobs:
       - name: Setup Node.js with pnpm cache
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
+          package-manager: 'pnpm'
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
@@ -221,7 +225,8 @@ jobs:
       - name: Setup Docker environment
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
+          package-manager: 'pnpm'
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
