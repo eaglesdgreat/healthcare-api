@@ -1,0 +1,7 @@
+allowBuilds:
+  '@nestjs/core': true
+  '@scarf/scarf': true
+  bcrypt: true
+  cpu-features: true
+  ssh2: true
+  unrs-resolver: true

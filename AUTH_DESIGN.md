@@ -118,15 +118,25 @@ if (!user.is_active) throw new ForbiddenException('Account requires activation')
 
 #### 4.3 Google Sign-In Integration
 
-1. The client identity layer transmits an openID Connect id_token obtained from Google to POST /auth/google.
+1. The client identity layer transmits an OpenID Connect id_token obtained from Google to POST /google.
 
 2. ms-auth-api cross-verifies the cryptographic token signature against Google's public JSON Web Key Sets (JWKS).
 
-3. If the email exists and matches an activated account, a native system JWT is immediately issued.
+3. If the email exists and matches an activated account, a native system JWT is issued and refresh tokens are persisted for rotation.
 
-4. If the email is unknown, the application provisions a new inactive user, triggers the specific role assignment step, updates the database, and publishes the account creation hooks.
+4. If the email is unknown, the application provisions a new inactive user, generates an activation token, emits `user.pending_activation`, and requires activation before first use.
 
-#### 4.4 Offline-First & Service Worker Architecture
+#### 4.4 Refresh Token Rotation & Revocation
+
+1. A refresh token is issued as a long-lived JWT and hashed before storage in a dedicated refresh_tokens table.
+
+2. Each refresh request validates both the JWT signature and the persisted refresh token record.
+
+3. Successful refresh rotates the token by revoking the existing refresh record and issuing a new refresh token.
+
+4. Logout revokes the refresh token so it cannot be reused.
+
+#### 4.5 Offline-First & Service Worker Architecture
 
 Since the platform uses an offline-first synchronization strategy, token issuance and lifetime management must support detached clients.
 

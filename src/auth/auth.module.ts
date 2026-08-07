@@ -8,6 +8,9 @@ import { AuthGuard } from './auth.guards'
 import { APP_GUARD } from '@nestjs/core/constants'
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { User } from '@/users/entities/user.entity'
+import { EventBusModule } from '@/common/event-bus.module'
+import { RefreshToken } from './entities/refresh-token.entity'
+import { GoogleAuthService } from './google-auth.service'
 
 @Module({
   providers: [
@@ -16,9 +19,11 @@ import { User } from '@/users/entities/user.entity'
       useClass: AuthGuard,
     },
     AuthService,
+    GoogleAuthService,
   ],
   imports: [
-    TypeOrmModule.forFeature([User]),
+    EventBusModule,
+    TypeOrmModule.forFeature([User, RefreshToken]),
     JwtModule.registerAsync({
       global: true,
       inject: [ConfigService],
