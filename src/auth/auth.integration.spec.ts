@@ -40,7 +40,9 @@ describe('Auth Integration (mysql)', () => {
   })
 
   afterAll(async () => {
-    await module.close()
+    if (module) {
+      await module.close()
+    }
   })
 
   it('signup -> persisted user', async () => {

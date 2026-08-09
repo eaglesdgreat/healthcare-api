@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing'
 import { INestApplication } from '@nestjs/common'
 import request from 'supertest'
 import { TypeOrmModule } from '@nestjs/typeorm'
+import { DataSource } from 'typeorm'
 import { AppModule } from './../src/app.module'
 import { User } from '@/users/entities/user.entity'
 import { RefreshToken } from '@/auth/entities/refresh-token.entity'
@@ -42,6 +43,12 @@ describe('Auth E2E (mysql)', () => {
   })
 
   it('/signup -> /activate -> /login flow', async () => {
+    const activationTokenPromise = new Promise<string>((resolve) => {
+      eventBus.once('user.pending_activation', (payload) => {
+        resolve((payload as any).activationToken)
+      })
+    })
+
     const signup = await request(app.getHttpServer()).post('/signup').send({
       firstName: 'E2E',
       lastName: 'Tester',
@@ -53,16 +60,10 @@ describe('Auth E2E (mysql)', () => {
 
     expect(signup.status).toBe(201)
 
-    const activationTokenPromise = new Promise<string>((resolve) => {
-      eventBus.once('user.pending_activation', (payload) => {
-        resolve((payload as any).activationToken)
-      })
-    })
-
     const activationToken = await activationTokenPromise
 
     const user = await moduleFixture
-      .get('DataSource')
+      .get(DataSource)
       .getRepository(User)
       .findOne({
         where: { email: 'e2e@example.com' },
