@@ -3,9 +3,10 @@ import { TypeOrmModule } from '@nestjs/typeorm'
 import { AuthModule } from './auth.module'
 import { UsersModule } from '@/users/user.module'
 import { AuthService } from './auth.service'
+import { LoginUserDto, RegisterUserDto } from './dto'
 import { User } from '@/users/entities/user.entity'
 import { RefreshToken } from './entities/refresh-token.entity'
-import { EventBusService } from '@/common/event-bus.service'
+import { EventBusService, EventPayload } from '@/common/event-bus.service'
 import { Repository } from 'typeorm'
 import { getRepositoryToken } from '@nestjs/typeorm'
 import { UserRole } from '@/users/entities/user.entity'
@@ -15,6 +16,13 @@ describe('Auth Integration (mysql)', () => {
   let authService: AuthService
   let usersRepo: Repository<User>
   let eventBus: EventBusService
+  const readActivationToken = (payload?: EventPayload): string => {
+    const token = payload?.activationToken
+    if (typeof token !== 'string') {
+      throw new Error('Activation token missing from event payload')
+    }
+    return token
+  }
 
   beforeAll(async () => {
     // Integration tests run against the project's MySQL instance.
@@ -48,18 +56,19 @@ describe('Auth Integration (mysql)', () => {
   it('signup -> persisted user', async () => {
     const activationTokenPromise = new Promise<string>((resolve) => {
       eventBus.once('user.pending_activation', (payload) => {
-        resolve((payload as any).activationToken)
+        resolve(readActivationToken(payload))
       })
     })
 
-    const res = await authService.signup({
+    const registerDto: RegisterUserDto = {
       firstName: 'Jane',
       lastName: 'Doe',
       email: 'jane@example.com',
       phoneNumber: '+1234567890',
       role: UserRole.PATIENT,
       password: 'Abcd1234!',
-    } as any)
+    }
+    const res = await authService.signup(registerDto)
 
     const activationToken = await activationTokenPromise
     expect(res).toHaveProperty('message')
@@ -76,18 +85,20 @@ describe('Auth Integration (mysql)', () => {
   it('activate -> activated', async () => {
     const activationTokenPromise = new Promise<string>((resolve) => {
       eventBus.once('user.pending_activation', (payload) => {
-        resolve((payload as any).activationToken)
+        resolve(readActivationToken(payload))
       })
     })
 
-    await authService.signup({
+    const registerDto: RegisterUserDto = {
       firstName: 'Jane',
       lastName: 'Doe',
       email: 'jane+retest@example.com',
       phoneNumber: '+1234567898',
       role: UserRole.PATIENT,
       password: 'Abcd1234!',
-    } as any)
+    }
+
+    await authService.signup(registerDto)
 
     const activationToken = await activationTokenPromise
     const user = await usersRepo.findOne({
@@ -105,10 +116,12 @@ describe('Auth Integration (mysql)', () => {
   })
 
   it('login -> tokens', async () => {
-    const res = await authService.login({
+    const loginDto: LoginUserDto = {
       username: 'jane@example.com',
       password: 'Abcd1234!',
-    } as any)
+    }
+
+    const res = await authService.login(loginDto)
     expect(res.meta).toHaveProperty('accessToken')
     expect(res.meta).toHaveProperty('refreshToken')
   })
