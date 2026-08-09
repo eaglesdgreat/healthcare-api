@@ -1,15 +1,21 @@
 # Stage 1: Base & Dependencies
 FROM node:22-slim AS base
 
-# Install netcat (nc) for the wait-for.sh script and procps for cleanup
+# Install netcat (nc) for the wait-for.sh script, procps for cleanup,
+# and build tools for native addons (cpu-features, ssh2, bcrypt)
 RUN apt-get update && apt-get install -y \
     netcat-openbsd \
     procps \
+    python3 \
+    make \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
 # Enable pnpm
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
+# Tell pnpm it's running in CI so it never prompts interactively
+ENV CI=true
 RUN corepack enable
 
 WORKDIR /app
