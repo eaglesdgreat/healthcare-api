@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing'
 import { TypeOrmModule } from '@nestjs/typeorm'
+import { ConfigModule } from '@nestjs/config'
 import { AuthModule } from './auth.module'
 import { UsersModule } from '@/users/user.module'
 import { AuthService } from './auth.service'
@@ -39,7 +40,12 @@ describe('Auth Integration (mysql)', () => {
     }
 
     module = await Test.createTestingModule({
-      imports: [TypeOrmModule.forRoot(dbConfig), UsersModule, AuthModule],
+      imports: [
+        ConfigModule.forRoot({ isGlobal: true }),
+        TypeOrmModule.forRoot(dbConfig),
+        UsersModule,
+        AuthModule,
+      ],
     }).compile()
 
     authService = module.get<AuthService>(AuthService)

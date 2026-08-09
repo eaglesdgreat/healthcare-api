@@ -65,6 +65,7 @@ jobs:
       MYSQL_USER: root
       MYSQL_PASSWORD: verysecretsomething
       MYSQL_DATABASE: ms_auth_test
+      JWT_SECRET: secret
     services:
       mysql:
         image: mysql:8
@@ -127,6 +128,7 @@ jobs:
       MYSQL_USER: root
       MYSQL_PASSWORD: verysecretsomething
       MYSQL_DATABASE: ms_auth_test
+      JWT_SECRET: secret
     services:
       mysql:
         image: mysql:8

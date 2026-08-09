@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     procps \
     python3 \
     make \
+    cmake \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
