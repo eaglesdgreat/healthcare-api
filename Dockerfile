@@ -25,7 +25,8 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Install ALL dependencies (including devDeps for building/testing)
-RUN pnpm install --frozen-lockfile
+# HUSKY=0 prevents the prepare script from erroring inside Docker (no .git dir)
+RUN HUSKY=0 pnpm install --frozen-lockfile
 
 # Copy the rest of the source code
 COPY . .
@@ -38,8 +39,9 @@ FROM base AS build
 RUN pnpm build
 
 # Stage 3: Install production-only dependencies
+# HUSKY=0 prevents the prepare script from trying to run husky (not installed in prod)
 FROM base AS prod-deps
-RUN pnpm install --prod --frozen-lockfile
+RUN HUSKY=0 pnpm install --prod --frozen-lockfile
 
 # Stage 4: Production Release (The "Slim" Runner)
 FROM node:22-slim AS release
