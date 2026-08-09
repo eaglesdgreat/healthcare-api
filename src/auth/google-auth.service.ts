@@ -23,7 +23,7 @@ export class GoogleAuthService {
         )
       }
       return payload
-    } catch (error) {
+    } catch {
       throw new InternalServerErrorException('Failed to verify Google token')
     }
   }

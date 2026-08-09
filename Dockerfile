@@ -35,10 +35,12 @@ RUN chmod +x ./shell/*.sh
 # Stage 2: Build (Compiles TS to JS)
 FROM base AS build
 RUN pnpm build
-# Remove development dependencies to keep the production image small
-RUN pnpm prune --prod
 
-# Stage 3: Production Release (The "Slim" Runner)
+# Stage 3: Install production-only dependencies
+FROM base AS prod-deps
+RUN pnpm install --prod --frozen-lockfile
+
+# Stage 4: Production Release (The "Slim" Runner)
 FROM node:22-slim AS release
 
 # Install netcat in release too if you run migrations there
@@ -48,7 +50,7 @@ WORKDIR /app
 
 # Copy only the compiled code and production node_modules from build stage
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/node_modules ./node_modules
+COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/shell ./shell
 

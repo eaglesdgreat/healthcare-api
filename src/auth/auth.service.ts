@@ -221,7 +221,7 @@ export class AuthService {
     }
 
     try {
-      const payload = await this.jwtService.verifyAsync(refreshToken)
+      await this.jwtService.verifyAsync(refreshToken)
 
       const tokenHash = this.hashValue(refreshToken)
       const storedToken = await this.refreshTokenRepository.findOne({
@@ -352,8 +352,8 @@ export class AuthService {
 
       await this.usersRepository.update(user.id, {
         isActive: true,
-        activationTokenHash: null as unknown as string,
-        activationExpiresAt: null as unknown as Date,
+        activationTokenHash: null,
+        activationExpiresAt: null,
       } as DeepPartial<User>)
 
       this.eventBus.emit('user.registered', {

@@ -3,6 +3,7 @@ import { AuthService } from './auth.service'
 import { AuthController } from './auth.controller'
 import { UsersModule } from '@/users/user.module'
 import { JwtModule } from '@nestjs/jwt'
+import { ConfigModule } from '@nestjs/config'
 import { ConfigService } from '@nestjs/config'
 import { AuthGuard } from './auth.guards'
 import { APP_GUARD } from '@nestjs/core/constants'
@@ -22,6 +23,7 @@ import { GoogleAuthService } from './google-auth.service'
     GoogleAuthService,
   ],
   imports: [
+    ConfigModule,
     EventBusModule,
     TypeOrmModule.forFeature([User, RefreshToken]),
     JwtModule.registerAsync({

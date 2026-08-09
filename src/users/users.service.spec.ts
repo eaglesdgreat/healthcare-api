@@ -6,6 +6,7 @@ import { UserRole } from './entities/user.entity'
 
 describe('UsersService', () => {
   let service: UsersService
+  let userRepo: ReturnType<typeof mockRepository>
 
   const mockRepository = () => ({
     findOne: jest.fn(),
@@ -22,20 +23,19 @@ describe('UsersService', () => {
     }).compile()
 
     service = module.get<UsersService>(UsersService)
+    userRepo = module.get(getRepositoryToken(User))
   })
 
   afterEach(() => jest.resetAllMocks())
 
   it('generateHealthId returns a prefixed id for PATIENT', async () => {
-    const repo = (service as any).usersRepository
-    repo.findOne.mockResolvedValue(null)
+    userRepo.findOne.mockResolvedValue(null)
     const id = await service.generateHealthId(UserRole.PATIENT)
     expect(id.startsWith('PAT-')).toBeTruthy()
   })
 
   it('generateHealthId returns a prefixed id for DOCTOR', async () => {
-    const repo = (service as any).usersRepository
-    repo.findOne.mockResolvedValue(null)
+    userRepo.findOne.mockResolvedValue(null)
     const id = await service.generateHealthId(UserRole.DOCTOR)
     expect(id.startsWith('DOC-')).toBeTruthy()
   })

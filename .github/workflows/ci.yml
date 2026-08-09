@@ -55,7 +55,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run unit tests
-        run: pnpm run test:unit -- --detectOpenHandles
+        run: pnpm run test:unit
 
   integration-tests:
     runs-on: ubuntu-latest
@@ -117,7 +117,7 @@ jobs:
           fi
 
       - name: Run integration tests
-        run: pnpm run test:integration -- --detectOpenHandles
+        run: pnpm run test:integration
 
   e2e-tests:
     runs-on: ubuntu-latest
@@ -179,7 +179,7 @@ jobs:
           fi
 
       - name: Run e2e tests
-        run: pnpm run test:e2e -- --detectOpenHandles
+        run: pnpm run test:e2e
 
   docker-release:
     runs-on: ubuntu-latest
@@ -274,4 +274,3 @@ jobs:
             "SELECT health_id FROM users WHERE email='ci-smoke@example.com';")
           if [ -z "$row" ]; then echo "No signup record found in DB"; exit 1; fi
           echo "Smoke test passed. User created with health_id=$row"
-

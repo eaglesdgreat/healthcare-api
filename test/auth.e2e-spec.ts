@@ -2,16 +2,24 @@ import { Test, TestingModule } from '@nestjs/testing'
 import { INestApplication } from '@nestjs/common'
 import request from 'supertest'
 import { TypeOrmModule } from '@nestjs/typeorm'
+import { DataSource } from 'typeorm'
 import { AppModule } from './../src/app.module'
 import { User } from '@/users/entities/user.entity'
 import { RefreshToken } from '@/auth/entities/refresh-token.entity'
-import { EventBusService } from '@/common/event-bus.service'
+import { EventBusService, EventPayload } from '@/common/event-bus.service'
 
 describe('Auth E2E (mysql)', () => {
   let app: INestApplication
   let moduleFixture: TestingModule
 
   let eventBus: EventBusService
+  const readActivationToken = (payload?: EventPayload): string => {
+    const token = payload?.activationToken
+    if (typeof token !== 'string') {
+      throw new Error('Activation token missing from event payload')
+    }
+    return token
+  }
 
   beforeAll(async () => {
     // E2E tests run against the project's MySQL instance (CI provides a service).
@@ -42,7 +50,14 @@ describe('Auth E2E (mysql)', () => {
   })
 
   it('/signup -> /activate -> /login flow', async () => {
-    const signup = await request(app.getHttpServer()).post('/signup').send({
+    const activationTokenPromise = new Promise<string>((resolve) => {
+      eventBus.once('user.pending_activation', (payload) => {
+        resolve(readActivationToken(payload))
+      })
+    })
+
+    const httpServer = app.getHttpServer() as Parameters<typeof request>[0]
+    const signup = await request(httpServer).post('/signup').send({
       firstName: 'E2E',
       lastName: 'Tester',
       email: 'e2e@example.com',
@@ -53,16 +68,10 @@ describe('Auth E2E (mysql)', () => {
 
     expect(signup.status).toBe(201)
 
-    const activationTokenPromise = new Promise<string>((resolve) => {
-      eventBus.once('user.pending_activation', (payload) => {
-        resolve((payload as any).activationToken)
-      })
-    })
-
     const activationToken = await activationTokenPromise
 
     const user = await moduleFixture
-      .get('DataSource')
+      .get<DataSource>(DataSource)
       .getRepository(User)
       .findOne({
         where: { email: 'e2e@example.com' },
@@ -70,17 +79,23 @@ describe('Auth E2E (mysql)', () => {
       })
     expect(user).toBeDefined()
 
-    const activate = await request(app.getHttpServer()).post('/activate').send({
+    const activate = await request(httpServer).post('/activate').send({
       healthId: user?.healthId,
       token: activationToken,
     })
     expect(activate.status).toBe(201)
 
-    const login = await request(app.getHttpServer())
+    const login = await request(httpServer)
       .post('/login')
       .send({ username: 'e2e@example.com', password: 'Abcd1234!' })
+    const loginBody = login.body as {
+      meta?: {
+        accessToken?: string
+        refreshToken?: string
+      }
+    }
     expect(login.status).toBe(201)
-    expect(login.body.meta).toHaveProperty('accessToken')
-    expect(login.body.meta).toHaveProperty('refreshToken')
+    expect(loginBody.meta?.accessToken).toBeDefined()
+    expect(loginBody.meta?.refreshToken).toBeDefined()
   })
 })
