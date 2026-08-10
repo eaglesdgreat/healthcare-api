@@ -25,7 +25,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "typecheck": "tsc --noEmit",
-    "prepare": "husky"
+    "prepare": "node -e \"if (process.env.CI !== 'true' && !process.env.HUSKY_SKIP_INSTALL) { require('child_process').execSync('husky', {stdio:'inherit'}) }\""
   },
   "lint-staged": {
     "**/*.{ts,js}": [
