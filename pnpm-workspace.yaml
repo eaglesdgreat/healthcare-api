@@ -5,3 +5,9 @@ allowBuilds:
   cpu-features: true
   ssh2: true
   unrs-resolver: true
+
+# Prevent pnpm from aborting when it detects node_modules drift in
+# non-interactive shells (e.g. VS Code's Source Control commit UI, CI).
+# Without this, `pnpm run <script>` can fail with
+# ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY when there's no TTY available.
+confirmModulesPurge: false
