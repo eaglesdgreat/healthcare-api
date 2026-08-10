@@ -25,11 +25,13 @@ import { HttpExceptionFilter } from '@/common/filters/http-exception.filter'
         database: configService.get('MYSQL_DATABASE'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         synchronize: false, // Set to false in production!
-        migrations: [__dirname + '/../migrations/*{.ts,.js}'],
-        migrationsRun: true,
-        cli: {
-          migrationsDir: '/migrations',
-        },
+        // Schema migrations are handled by db-migrate (see shell/run-db-migration.sh
+        // and shell/start-dev.sh), which runs before the app boots. TypeORM's own
+        // migration runner is intentionally NOT used here because our migration
+        // files are written in db-migrate's format (exports.setup/up/down), not
+        // TypeORM's MigrationInterface format. Enabling migrationsRun here causes
+        // TypeORM to try to instantiate those files as its own migration classes,
+        // which fails with "Cannot read properties of undefined (reading 'dbmigrate')".
       }),
     }),
     AuthModule,
