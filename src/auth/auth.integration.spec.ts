@@ -4,13 +4,17 @@ import { ConfigModule } from '@nestjs/config'
 import { AuthModule } from './auth.module'
 import { UsersModule } from '@/users/user.module'
 import { AuthService } from './auth.service'
-import { LoginUserDto, RegisterUserDto } from './dto'
 import { User } from '@/users/entities/user.entity'
 import { RefreshToken } from './entities/refresh-token.entity'
 import { EventBusService, EventPayload } from '@/common/event-bus.service'
 import { Repository } from 'typeorm'
 import { getRepositoryToken } from '@nestjs/typeorm'
-import { UserRole } from '@/users/entities/user.entity'
+import {
+  MOCK,
+  mockRegisterUserDto,
+  mockSecondaryRegisterUserDto,
+  mockSecondaryLoginUserDto,
+} from '@/common/test/mock-data'
 
 describe('Auth Integration (mysql)', () => {
   let module: TestingModule
@@ -66,25 +70,17 @@ describe('Auth Integration (mysql)', () => {
       })
     })
 
-    const registerDto: RegisterUserDto = {
-      firstName: 'Jane',
-      lastName: 'Doe',
-      email: 'jane@example.com',
-      phoneNumber: '+1234567890',
-      role: UserRole.PATIENT,
-      password: 'Abcd1234!',
-    }
-    const res = await authService.signup(registerDto)
+    const res = await authService.signup(mockRegisterUserDto)
 
     const activationToken = await activationTokenPromise
     expect(res).toHaveProperty('message')
     expect(typeof activationToken).toBe('string')
 
     const user = await usersRepo.findOne({
-      where: [{ email: 'jane@example.com' }],
+      where: [{ email: MOCK.user.email }],
     })
     expect(user).toBeDefined()
-    expect(user?.email).toBe('jane@example.com')
+    expect(user?.email).toBe(MOCK.user.email)
     expect(user?.isActive).toBe(false)
   })
 
@@ -95,20 +91,11 @@ describe('Auth Integration (mysql)', () => {
       })
     })
 
-    const registerDto: RegisterUserDto = {
-      firstName: 'Jane',
-      lastName: 'Doe',
-      email: 'jane+retest@example.com',
-      phoneNumber: '+1234567898',
-      role: UserRole.PATIENT,
-      password: 'Abcd1234!',
-    }
-
-    await authService.signup(registerDto)
+    await authService.signup(mockSecondaryRegisterUserDto)
 
     const activationToken = await activationTokenPromise
     const user = await usersRepo.findOne({
-      where: [{ email: 'jane+retest@example.com' }],
+      where: [{ email: MOCK.secondaryUser.email }],
     })
     expect(user).toBeDefined()
 
@@ -116,18 +103,13 @@ describe('Auth Integration (mysql)', () => {
     expect(act).toHaveProperty('message')
 
     const reloaded = await usersRepo.findOne({
-      where: [{ email: 'jane+retest@example.com' }],
+      where: [{ email: MOCK.secondaryUser.email }],
     })
     expect(reloaded?.isActive).toBe(true)
   })
 
   it('login -> tokens', async () => {
-    const loginDto: LoginUserDto = {
-      username: 'jane@example.com',
-      password: 'Abcd1234!',
-    }
-
-    const res = await authService.login(loginDto)
+    const res = await authService.login(mockSecondaryLoginUserDto)
     expect(res.meta).toHaveProperty('accessToken')
     expect(res.meta).toHaveProperty('refreshToken')
   })

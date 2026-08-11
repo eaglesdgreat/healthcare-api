@@ -7,6 +7,7 @@ import { AppModule } from './../src/app.module'
 import { User } from '@/users/entities/user.entity'
 import { RefreshToken } from '@/auth/entities/refresh-token.entity'
 import { EventBusService, EventPayload } from '@/common/event-bus.service'
+import { MOCK } from '@/common/test/mock-data'
 
 describe('Auth E2E (mysql)', () => {
   let app: INestApplication
@@ -58,12 +59,12 @@ describe('Auth E2E (mysql)', () => {
 
     const httpServer = app.getHttpServer() as Parameters<typeof request>[0]
     const signup = await request(httpServer).post('/signup').send({
-      firstName: 'E2E',
-      lastName: 'Tester',
-      email: 'e2e@example.com',
-      phoneNumber: '+1234567890',
+      firstName: MOCK.user.firstName,
+      lastName: MOCK.user.lastName,
+      email: MOCK.user.email,
+      phoneNumber: MOCK.user.phoneNumber,
       role: 'PATIENT',
-      password: 'Abcd1234!',
+      password: MOCK.user.password,
     })
 
     expect(signup.status).toBe(201)
@@ -74,7 +75,7 @@ describe('Auth E2E (mysql)', () => {
       .get<DataSource>(DataSource)
       .getRepository(User)
       .findOne({
-        where: { email: 'e2e@example.com' },
+        where: { email: MOCK.user.email },
         select: ['healthId'],
       })
     expect(user).toBeDefined()
@@ -87,7 +88,7 @@ describe('Auth E2E (mysql)', () => {
 
     const login = await request(httpServer)
       .post('/login')
-      .send({ username: 'e2e@example.com', password: 'Abcd1234!' })
+      .send({ username: MOCK.user.email, password: MOCK.user.password })
     const loginBody = login.body as {
       meta?: {
         accessToken?: string

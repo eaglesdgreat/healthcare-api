@@ -7,10 +7,14 @@ import { getRepositoryToken } from '@nestjs/typeorm'
 import { User, UserRole } from '@/users/entities/user.entity'
 import { RefreshToken } from './entities/refresh-token.entity'
 import { GoogleAuthService } from './google-auth.service'
-import { GoogleSignInDto } from './dto/google-signin.dto'
-import { LoginUserDto, RegisterUserDto } from './dto'
 import { createHash } from 'crypto'
 import * as bcrypt from 'bcrypt'
+import {
+  MOCK,
+  mockRegisterUserDto,
+  mockLoginUserDto,
+  mockGoogleSignInDto,
+} from '@/common/test/mock-data'
 
 type UserRepoMock = {
   findOne: jest.Mock
@@ -74,8 +78,8 @@ describe('AuthService', () => {
     mockJwtService.sign.mockReturnValue('signed-token')
     mockJwtService.verifyAsync.mockResolvedValue({ sub: 'uuid' })
     mockGoogleAuthService.verifyIdToken.mockResolvedValue({
-      email: 'google@example.com',
-      email_verified: true,
+      email: MOCK.googleUser.email,
+      email_verified: MOCK.googleUser.emailVerified,
     })
 
     const module: TestingModule = await Test.createTestingModule({
@@ -99,47 +103,29 @@ describe('AuthService', () => {
   afterEach(() => jest.resetAllMocks())
 
   it('should throw ConflictException if email already exists on signup', async () => {
-    mockUserRepo.findOne.mockResolvedValue({ email: 'test@example.com' })
+    mockUserRepo.findOne.mockResolvedValue({ email: MOCK.user.email })
 
-    const registerDto: RegisterUserDto = {
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'test@example.com',
-      phoneNumber: '+2348012345678',
-      role: UserRole.PATIENT,
-      password: 'Abcd1234!',
-    }
-
-    await expect(service.signup(registerDto)).rejects.toThrow()
+    await expect(service.signup(mockRegisterUserDto)).rejects.toThrow()
   })
 
   it('should signup and return message on success', async () => {
     mockUserRepo.findOne.mockResolvedValue(null)
-    mockUsersService.generateHealthId.mockResolvedValue('PAT-ABCDEFGH')
+    mockUsersService.generateHealthId.mockResolvedValue(MOCK.healthId.patient)
     mockUserRepo.create.mockImplementation(
       (data: Partial<User>): User => data as User,
     )
-    mockUserRepo.save.mockResolvedValue({ id: 'uuid', firstName: 'John' })
+    mockUserRepo.save.mockResolvedValue({ id: 'uuid', firstName: 'Mock' })
 
-    const registerDto: RegisterUserDto = {
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'new@example.com',
-      phoneNumber: '+2348012345678',
-      role: UserRole.PATIENT,
-      password: 'Abcd1234!',
-    }
-
-    const res = await service.signup(registerDto)
+    const res = await service.signup(mockRegisterUserDto)
 
     expect(res).toHaveProperty('message')
     expect(mockUserRepo.save).toHaveBeenCalled()
     expect(mockEventBus.emit).toHaveBeenCalledWith(
       'user.pending_activation',
       expect.objectContaining({
-        email: 'new@example.com',
-        phoneNumber: '+2348012345678',
-        healthId: 'PAT-ABCDEFGH',
+        email: MOCK.user.email,
+        phoneNumber: MOCK.user.phoneNumber,
+        healthId: MOCK.healthId.patient,
         role: UserRole.PATIENT,
       }),
     )
@@ -147,26 +133,23 @@ describe('AuthService', () => {
 
   it('should throw Unauthorized when login with wrong credentials', async () => {
     mockUsersService.findUserByUsername.mockResolvedValue(null)
-    await expect(
-      service.login({ username: 'notfound', password: 'Pass123!' }),
-    ).rejects.toThrow()
+    await expect(service.login(mockLoginUserDto)).rejects.toThrow()
   })
 
   it('should login successfully and return tokens', async () => {
-    const password = 'Password1!'
+    const password = MOCK.user.password
     const hashed = await bcrypt.hash(password, 10)
     mockUsersService.findUserByUsername.mockResolvedValue({
       id: 'uuid',
-      email: 'u@example.com',
-      phoneNumber: '+1234567890',
+      email: MOCK.user.email,
+      phoneNumber: MOCK.user.phoneNumber,
       password: hashed,
       isActive: true,
       role: UserRole.PATIENT,
-      healthId: 'PAT-ABCDEFGH',
+      healthId: MOCK.healthId.patient,
     })
 
-    const loginDto: LoginUserDto = { username: 'u@example.com', password }
-    const res = await service.login(loginDto)
+    const res = await service.login(mockLoginUserDto)
 
     expect(res).toHaveProperty('data')
     expect(res.meta).toHaveProperty('accessToken')
@@ -177,24 +160,23 @@ describe('AuthService', () => {
 
   it('should sign in with Google when active user exists', async () => {
     const payload = {
-      email: 'google@example.com',
-      email_verified: true,
-      given_name: 'Google',
-      family_name: 'User',
+      email: MOCK.googleUser.email,
+      email_verified: MOCK.googleUser.emailVerified,
+      given_name: MOCK.googleUser.givenName,
+      family_name: MOCK.googleUser.familyName,
     }
     mockGoogleAuthService.verifyIdToken.mockResolvedValue(payload)
     mockUsersService.findUserByUsername.mockResolvedValue({
       id: 'uuid',
-      email: 'google@example.com',
-      phoneNumber: '+1234567890',
+      email: MOCK.googleUser.email,
+      phoneNumber: MOCK.googleUser.phoneNumber,
       password: null,
       isActive: true,
       role: UserRole.PATIENT,
-      healthId: 'PAT-ABCDEFGH',
+      healthId: MOCK.healthId.patient,
     })
 
-    const dto: GoogleSignInDto = { idToken: 'token' }
-    const result = await service.googleSignIn(dto)
+    const result = await service.googleSignIn(mockGoogleSignInDto)
 
     expect(result).toHaveProperty('data')
     expect(result.meta).toHaveProperty('accessToken')
@@ -204,13 +186,13 @@ describe('AuthService', () => {
   it('should refresh a valid refresh token', async () => {
     const user = {
       id: 'uuid',
-      email: 'u@example.com',
-      phoneNumber: '+1234567890',
-      healthId: 'PAT-ABCDEFGH',
+      email: MOCK.user.email,
+      phoneNumber: MOCK.user.phoneNumber,
+      healthId: MOCK.healthId.patient,
       role: UserRole.PATIENT,
       isActive: true,
     }
-    const refreshToken = 'valid-refresh-token'
+    const refreshToken = MOCK.refreshToken
     mockRefreshRepo.findOne.mockResolvedValue({
       userId: 'uuid',
       token: hashValue(refreshToken),
@@ -228,35 +210,35 @@ describe('AuthService', () => {
   })
 
   it('should reject login when the user is inactive', async () => {
-    const password = 'Password1!'
+    const password = MOCK.user.password
     const hashed = await bcrypt.hash(password, 10)
     mockUsersService.findUserByUsername.mockResolvedValue({
       id: 'uuid',
-      email: 'u@example.com',
-      phoneNumber: '+1234567890',
+      email: MOCK.user.email,
+      phoneNumber: MOCK.user.phoneNumber,
       password: hashed,
       isActive: false,
       role: UserRole.PATIENT,
-      healthId: 'PAT-ABCDEFGH',
+      healthId: MOCK.healthId.patient,
     })
 
-    await expect(
-      service.login({ username: 'u@example.com', password }),
-    ).rejects.toThrow()
+    await expect(service.login(mockLoginUserDto)).rejects.toThrow()
   })
 
   it('should activate account with valid token', async () => {
     mockUserRepo.findOne.mockResolvedValue({
       id: 'uuid',
-      healthId: 'PAT-ABC',
-      email: 'u@example.com',
+      healthId: MOCK.healthId.patient,
+      email: MOCK.user.email,
       role: UserRole.PATIENT,
-      activationTokenHash: hashValue('token123'),
+      activationTokenHash: hashValue(MOCK.activationToken),
       activationExpiresAt: new Date(Date.now() + 1000 * 60 * 60),
       isActive: false,
     })
 
-    await expect(service.activate('PAT-ABC', 'token123')).resolves.toEqual({
+    await expect(
+      service.activate(MOCK.healthId.patient, MOCK.activationToken),
+    ).resolves.toEqual({
       message: 'Account activated successfully',
     })
     expect(mockUserRepo.update).toHaveBeenCalled()
@@ -265,15 +247,17 @@ describe('AuthService', () => {
   it('should reject account activation with an expired token', async () => {
     mockUserRepo.findOne.mockResolvedValue({
       id: 'uuid',
-      healthId: 'PAT-ABC',
-      email: 'u@example.com',
+      healthId: MOCK.healthId.patient,
+      email: MOCK.user.email,
       role: UserRole.PATIENT,
-      activationTokenHash: hashValue('token123'),
+      activationTokenHash: hashValue(MOCK.activationToken),
       activationExpiresAt: new Date(Date.now() - 1000 * 60 * 60),
       isActive: false,
     })
 
-    await expect(service.activate('PAT-ABC', 'token123')).rejects.toThrow()
+    await expect(
+      service.activate(MOCK.healthId.patient, MOCK.activationToken),
+    ).rejects.toThrow()
     expect(mockUserRepo.update).not.toHaveBeenCalled()
   })
 })
