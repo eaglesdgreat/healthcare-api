@@ -9,9 +9,9 @@
  * consuming DTO / entity field so assignments never trigger unsafe-type errors.
  */
 
-import type { RegisterUserDto } from '@/auth/dto/register-user.dto'
-import type { LoginUserDto } from '@/auth/dto/login-user.dto'
-import type { GoogleSignInDto } from '@/auth/dto/google-signin.dto'
+import { RegisterUserDto } from '@/auth/dto/register-user.dto'
+import { LoginUserDto } from '@/auth/dto/login-user.dto'
+import { GoogleSignInDto } from '@/auth/dto/google-signin.dto'
 import { UserRole } from '@/users/entities/user.entity'
 
 export const MOCK = {
@@ -58,11 +58,11 @@ export const MOCK = {
 
   /** Mock health IDs by role */
   healthId: {
-    patient: 'PAT-MOCK0001' as string,
-    doctor: 'DOC-MOCK0001' as string,
-    hospital: 'HOS-MOCK0001' as string,
+    patient: 'PAT-MOCK0001',
+    doctor: 'DOC-MOCK0001',
+    hospital: 'HOS-MOCK0001',
   },
-} as const
+}
 
 /** Mock role matching the UserRole enum type. */
 export const mockRole: UserRole = UserRole.PATIENT
