@@ -241,6 +241,11 @@ jobs:
             sleep 2
           done
 
+      - name: Run database migrations
+        run: pnpm run migrate:up --env=dev
+        env:
+          NODE_ENV: dev
+
       - name: Run container-based integration smoke test
         run: |
           container_id=$(docker run --detach --rm --network host \
