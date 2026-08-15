@@ -25,6 +25,9 @@ services:
       - CHOKIDAR_USEPOLLING=true
       - CHOKIDAR_INTERVAL=1000
       - WATCHPACK_POLLING=true
+      # TypeScript's watch mode (used by nest start --watch) does NOT respect CHOKIDAR_USEPOLLING.
+      # It uses its own watcher, controlled by TSC_WATCHFILE. Force polling for Windows Docker bind mounts.
+      - TSC_WATCHFILE=DynamicPriorityPolling
     # Using your wait-for pattern to ensure DB is ready before Nest starts
     command: >
       sh -c "./shell/wait-for.sh ms-auth-db:3306 -- sh ./shell/start-dev.sh"
