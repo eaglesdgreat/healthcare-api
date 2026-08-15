@@ -11,7 +11,7 @@ import { UsersService } from '@/users/users.service'
 import { User, UserRole } from '@/users/entities/user.entity'
 import { EventBusService } from '@/common/event-bus.service'
 import * as bcrypt from 'bcrypt'
-import { LoginUserDto, RegisterUserDto } from './dto'
+import { LoginUserDto, RegisterUserDto, ResendActivationDto } from './dto'
 import { Repository, DeepPartial } from 'typeorm'
 import { InjectRepository } from '@nestjs/typeorm'
 import { randomBytes, createHash } from 'crypto'
@@ -312,6 +312,84 @@ export class AuthService {
 
   private hashValue(value: string) {
     return createHash('sha256').update(value).digest('hex')
+  }
+
+  /**
+   * Resend the activation token for an account that has not yet been activated,
+   * for example when the previous token has expired. Enforces a cooldown to
+   * prevent abuse.
+   */
+  async resendActivation(
+    resendActivationDto: ResendActivationDto,
+  ): Promise<{ message: string }> {
+    const { identifier } = resendActivationDto
+    const RESEND_COOLDOWN_MS = 60 * 1000 // 60 seconds
+
+    try {
+      const user = await this.usersRepository.findOne({
+        where: [{ email: identifier }, { phoneNumber: identifier }],
+      })
+
+      if (!user) {
+        // Do not reveal whether an account exists.
+        throw new UnauthorizedException(
+          'Unable to resend activation code at this time',
+        )
+      }
+
+      if (user.isActive) {
+        return { message: 'Account is already activated' }
+      }
+
+      // Cooldown to avoid spamming the activation channel.
+      if (user.lastActivationSentAt) {
+        const elapsed =
+          Date.now() - new Date(user.lastActivationSentAt).getTime()
+        if (elapsed < RESEND_COOLDOWN_MS) {
+          const waitSeconds = Math.ceil((RESEND_COOLDOWN_MS - elapsed) / 1000)
+          throw new BadRequestException(
+            `Please wait ${waitSeconds} seconds before requesting a new code`,
+          )
+        }
+      }
+
+      const activationToken = randomBytes(8).toString('hex')
+      // TEMP: log the real token for local testing until the notification service is built
+      console.log('ACTIVATION TOKEN:', activationToken)
+      const activationTokenHash = this.hashValue(activationToken)
+      const activationExpiresAt = new Date()
+      activationExpiresAt.setHours(activationExpiresAt.getHours() + 24)
+
+      await this.usersRepository.update(user.id, {
+        activationTokenHash,
+        activationExpiresAt,
+        lastActivationSentAt: new Date(),
+      } as DeepPartial<User>)
+
+      this.eventBus.emit('user.pending_activation', {
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        healthId: user.healthId,
+        activationToken,
+        activationExpiresAt: activationExpiresAt.toISOString(),
+        role: user.role,
+        resend: true,
+      })
+
+      return {
+        message:
+          'A new activation code has been sent. Use it to activate your account before it expires.',
+      }
+    } catch (error) {
+      console.error(error)
+      if (
+        error instanceof UnauthorizedException ||
+        error instanceof BadRequestException
+      ) {
+        throw error
+      }
+      throw new InternalServerErrorException('Failed to resend activation code')
+    }
   }
 
   async activate(

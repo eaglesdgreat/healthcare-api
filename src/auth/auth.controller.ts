@@ -1,6 +1,6 @@
 import { Controller, Post, Body } from '@nestjs/common'
 import { AuthService } from './auth.service'
-import { LoginUserDto, RegisterUserDto } from './dto'
+import { LoginUserDto, RegisterUserDto, ResendActivationDto } from './dto'
 import { GoogleSignInDto } from './dto/google-signin.dto'
 import { Public } from './auth.decorator'
 
@@ -32,6 +32,11 @@ export class AuthController {
   @Post('google')
   async googleSignIn(@Body() googleSignInDto: GoogleSignInDto) {
     return await this.authService.googleSignIn(googleSignInDto)
+  }
+
+  @Post('resend-activation')
+  async resendActivation(@Body() resendActivationDto: ResendActivationDto) {
+    return await this.authService.resendActivation(resendActivationDto)
   }
 
   @Post('activate')

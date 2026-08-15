@@ -5,6 +5,7 @@ import {
   MOCK,
   mockRegisterUserDto,
   mockLoginUserDto,
+  mockResendActivationDto,
 } from '@/common/test/mock-data'
 
 describe('AuthController', () => {
@@ -14,6 +15,7 @@ describe('AuthController', () => {
     signup: jest.fn(),
     login: jest.fn(),
     activate: jest.fn(),
+    resendActivation: jest.fn(),
   }
 
   beforeEach(async () => {
@@ -53,5 +55,16 @@ describe('AuthController', () => {
       body.token,
     )
     expect(res).toEqual({ message: 'activated' })
+  })
+
+  it('should call resendActivation on authService', async () => {
+    mockAuthService.resendActivation.mockResolvedValue({
+      message: 'A new activation code has been sent',
+    })
+    const res = await controller.resendActivation(mockResendActivationDto)
+    expect(mockAuthService.resendActivation).toHaveBeenCalledWith(
+      mockResendActivationDto,
+    )
+    expect(res).toEqual({ message: 'A new activation code has been sent' })
   })
 })
