@@ -4,7 +4,7 @@ import { ConfigModule } from '@nestjs/config'
 import { AuthModule } from './auth.module'
 import { UsersModule } from '@/users/user.module'
 import { AuthService } from './auth.service'
-import { User } from '@/users/entities/user.entity'
+import { User, UserRole } from '@/users/entities/user.entity'
 import { RefreshToken } from './entities/refresh-token.entity'
 import { EventBusService, EventPayload } from '@/common/event-bus.service'
 import { Repository } from 'typeorm'
@@ -106,6 +106,44 @@ describe('Auth Integration (mysql)', () => {
       where: [{ email: MOCK.secondaryUser.email }],
     })
     expect(reloaded?.isActive).toBe(true)
+  })
+
+  it('resend activation -> new token activates the account', async () => {
+    // Sign up a fresh user
+    const signupTokenPromise = new Promise<void>((resolve) => {
+      const listener = () => resolve()
+      eventBus.once('user.pending_activation', listener)
+    })
+    await authService.signup({
+      firstName: 'Resend',
+      lastName: 'User',
+      email: 'resend.mock@example.com',
+      phoneNumber: '+15550000009',
+      role: UserRole.PATIENT,
+      password: 'MockPass123!',
+    })
+    await signupTokenPromise
+
+    const resendTokenPromise = new Promise<string>((resolve) => {
+      eventBus.once('user.pending_activation', (payload) => {
+        resolve(readActivationToken(payload))
+      })
+    })
+    await authService.resendActivation({
+      identifier: 'resend.mock@example.com',
+    })
+    const resendToken = await resendTokenPromise
+
+    expect(typeof resendToken).toBe('string')
+    expect(resendToken.length).toBeGreaterThan(0)
+
+    const user = await usersRepo.findOne({
+      where: [{ email: 'resend.mock@example.com' }],
+    })
+    expect(user).toBeDefined()
+
+    const act = await authService.activate(user!.healthId, resendToken)
+    expect(act).toHaveProperty('message')
   })
 
   it('login -> tokens', async () => {

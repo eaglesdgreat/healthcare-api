@@ -73,6 +73,13 @@ export class User {
   })
   activationExpiresAt: Date | null
 
+  @Column('timestamp', {
+    name: 'last_activation_sent_at',
+    nullable: true,
+    select: false,
+  })
+  lastActivationSentAt: Date | null
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date
 

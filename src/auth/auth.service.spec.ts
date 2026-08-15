@@ -14,6 +14,7 @@ import {
   mockRegisterUserDto,
   mockLoginUserDto,
   mockGoogleSignInDto,
+  mockResendActivationDto,
 } from '@/common/test/mock-data'
 
 type UserRepoMock = {
@@ -259,5 +260,92 @@ describe('AuthService', () => {
       service.activate(MOCK.healthId.patient, MOCK.activationToken),
     ).rejects.toThrow()
     expect(mockUserRepo.update).not.toHaveBeenCalled()
+  })
+
+  it('should resend activation code for an inactive user', async () => {
+    mockUserRepo.findOne.mockResolvedValue({
+      id: 'uuid',
+      email: MOCK.user.email,
+      phoneNumber: MOCK.user.phoneNumber,
+      healthId: MOCK.healthId.patient,
+      role: UserRole.PATIENT,
+      isActive: false,
+      activationTokenHash: 'old-hash',
+      lastActivationSentAt: null,
+    })
+
+    const res = await service.resendActivation(mockResendActivationDto)
+
+    expect(res).toHaveProperty('message')
+    expect(mockUserRepo.update).toHaveBeenCalledTimes(1)
+    const updateCall = mockUserRepo.update.mock.calls[0] as [
+      string,
+      {
+        activationTokenHash: string
+        activationExpiresAt: Date
+        lastActivationSentAt: Date
+      },
+    ]
+    expect(updateCall[0]).toBe('uuid')
+    const updateArg = updateCall[1]
+    expect(typeof updateArg.activationTokenHash).toBe('string')
+    expect(updateArg.activationExpiresAt).toBeInstanceOf(Date)
+    expect(updateArg.lastActivationSentAt).toBeInstanceOf(Date)
+
+    expect(mockEventBus.emit).toHaveBeenCalledTimes(1)
+    const emitArg = mockEventBus.emit.mock.calls[0] as [
+      string,
+      { email: string; activationToken: string; resend: boolean },
+    ]
+    expect(emitArg[0]).toBe('user.pending_activation')
+    expect(emitArg[1].email).toBe(MOCK.user.email)
+    expect(typeof emitArg[1].activationToken).toBe('string')
+    expect(emitArg[1].resend).toBe(true)
+  })
+
+  it('should not reveal whether an account exists when resending', async () => {
+    mockUserRepo.findOne.mockResolvedValue(null)
+
+    await expect(
+      service.resendActivation(mockResendActivationDto),
+    ).rejects.toThrow('Unable to resend activation code at this time')
+    expect(mockUserRepo.update).not.toHaveBeenCalled()
+    expect(mockEventBus.emit).not.toHaveBeenCalled()
+  })
+
+  it('should return message when account is already activated on resend', async () => {
+    mockUserRepo.findOne.mockResolvedValue({
+      id: 'uuid',
+      email: MOCK.user.email,
+      phoneNumber: MOCK.user.phoneNumber,
+      healthId: MOCK.healthId.patient,
+      role: UserRole.PATIENT,
+      isActive: true,
+      lastActivationSentAt: null,
+    })
+
+    const res = await service.resendActivation(mockResendActivationDto)
+
+    expect(res.message).toBe('Account is already activated')
+    expect(mockEventBus.emit).not.toHaveBeenCalled()
+    expect(mockUserRepo.update).not.toHaveBeenCalled()
+  })
+
+  it('should enforce a resend cooldown within 60 seconds', async () => {
+    mockUserRepo.findOne.mockResolvedValue({
+      id: 'uuid',
+      email: MOCK.user.email,
+      phoneNumber: MOCK.user.phoneNumber,
+      healthId: MOCK.healthId.patient,
+      role: UserRole.PATIENT,
+      isActive: false,
+      lastActivationSentAt: new Date(),
+    })
+
+    await expect(
+      service.resendActivation(mockResendActivationDto),
+    ).rejects.toThrow(/Please wait/)
+    expect(mockUserRepo.update).not.toHaveBeenCalled()
+    expect(mockEventBus.emit).not.toHaveBeenCalled()
   })
 })

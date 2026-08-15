@@ -99,4 +99,44 @@ describe('Auth E2E (mysql)', () => {
     expect(loginBody.meta?.accessToken).toBeDefined()
     expect(loginBody.meta?.refreshToken).toBeDefined()
   })
+
+  it('/resend-activation returns a new code for an inactive user', async () => {
+    const httpServer = app.getHttpServer() as Parameters<typeof request>[0]
+    const email = 'resend.e2e@example.com'
+
+    await request(httpServer).post('/signup').send({
+      firstName: 'Resend',
+      lastName: 'E2E',
+      email,
+      phoneNumber: '+15550000099',
+      role: 'PATIENT',
+      password: 'MockPass123!',
+    })
+
+    const resendTokenPromise = new Promise<string>((resolve) => {
+      eventBus.once('user.pending_activation', (payload) => {
+        resolve(readActivationToken(payload))
+      })
+    })
+    const res = await request(httpServer)
+      .post('/resend-activation')
+      .send({ identifier: email })
+    expect(res.status).toBe(201)
+    const resBody = res.body as { message?: string }
+    expect(resBody.message).toBeDefined()
+    const newToken = await resendTokenPromise
+    expect(typeof newToken).toBe('string')
+
+    const user = await moduleFixture
+      .get<DataSource>(DataSource)
+      .getRepository(User)
+      .findOne({ where: { email }, select: ['healthId'] })
+    expect(user).toBeDefined()
+
+    const activate = await request(httpServer).post('/activate').send({
+      healthId: user?.healthId,
+      token: newToken,
+    })
+    expect(activate.status).toBe(201)
+  })
 })

@@ -12,6 +12,7 @@
 import { RegisterUserDto } from '@/auth/dto/register-user.dto'
 import { LoginUserDto } from '@/auth/dto/login-user.dto'
 import { GoogleSignInDto } from '@/auth/dto/google-signin.dto'
+import { ResendActivationDto } from '@/auth/dto/resend-activation.dto'
 import { UserRole } from '@/users/entities/user.entity'
 
 export const MOCK = {
@@ -102,4 +103,9 @@ export const mockSecondaryLoginUserDto: LoginUserDto = {
 /** GoogleSignInDto fully typed to match its declared field types. */
 export const mockGoogleSignInDto: GoogleSignInDto = {
   idToken: 'mock-google-id-token',
+}
+
+/** ResendActivationDto fully typed to match its declared field types. */
+export const mockResendActivationDto: ResendActivationDto = {
+  identifier: MOCK.user.email,
 }
