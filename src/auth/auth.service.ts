@@ -58,8 +58,10 @@ export class AuthService {
       const passwordHash = await bcrypt.hash(password, salt)
 
       const healthId = await this.usersService.generateHealthId(role)
-      const activationToken = randomBytes(24).toString('hex')
+      const activationToken = randomBytes(8).toString('hex')
       const activationTokenHash = this.hashValue(activationToken)
+      // TEMP: log the real token for local testing until the notification service is built
+      console.log('ACTIVATION TOKEN:', activationToken)
       const activationExpiresAt = new Date()
       activationExpiresAt.setHours(activationExpiresAt.getHours() + 24)
 

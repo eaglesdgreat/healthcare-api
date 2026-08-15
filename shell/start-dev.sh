@@ -6,6 +6,7 @@ export PORT=5501
 export CHOKIDAR_USEPOLLING=true
 export CHOKIDAR_INTERVAL=1000
 export WATCHPACK_POLLING=true
+export TSC_WATCHFILE=DynamicPriorityPolling
 
 echo "Running database migrations..."
 pnpm exec db-migrate up -e "$NODE_ENV"
