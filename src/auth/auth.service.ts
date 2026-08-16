@@ -322,7 +322,7 @@ export class AuthService {
   async resendActivation(
     resendActivationDto: ResendActivationDto,
   ): Promise<{ message: string }> {
-    const { identifier } = resendActivationDto
+    const { identifier }: ResendActivationDto = resendActivationDto
     const RESEND_COOLDOWN_MS = 60 * 1000 // 60 seconds
 
     try {
