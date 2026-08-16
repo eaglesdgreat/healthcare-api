@@ -20,11 +20,9 @@
     "incremental": true,
     "skipLibCheck": true,
     "types": ["jest", "node"],
-    "strictNullChecks": true,
-    "forceConsistentCasingInFileNames": true,
-    "noImplicitAny": false,
-    "strictBindCallApply": false,
-    "noFallthroughCasesInSwitch": false
+    "strict": true,
+    "strictPropertyInitialization": false,
+    "forceConsistentCasingInFileNames": true
   },
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }
