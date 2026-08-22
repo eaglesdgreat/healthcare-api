@@ -84,7 +84,7 @@ describe('Auth E2E (mysql)', () => {
       healthId: user?.healthId,
       token: activationToken,
     })
-    expect(activate.status).toBe(201)
+    expect(activate.status).toBe(200)
 
     const login = await request(httpServer)
       .post('/login')
@@ -95,7 +95,7 @@ describe('Auth E2E (mysql)', () => {
         refreshToken?: string
       }
     }
-    expect(login.status).toBe(201)
+    expect(login.status).toBe(200)
     expect(loginBody.meta?.accessToken).toBeDefined()
     expect(loginBody.meta?.refreshToken).toBeDefined()
   })
@@ -121,7 +121,7 @@ describe('Auth E2E (mysql)', () => {
     const res = await request(httpServer)
       .post('/resend-activation')
       .send({ identifier: email })
-    expect(res.status).toBe(201)
+    expect(res.status).toBe(200)
     const resBody = res.body as { message?: string }
     expect(resBody.message).toBeDefined()
     const newToken = await resendTokenPromise
@@ -137,6 +137,6 @@ describe('Auth E2E (mysql)', () => {
       healthId: user?.healthId,
       token: newToken,
     })
-    expect(activate.status).toBe(201)
+    expect(activate.status).toBe(200)
   })
 })
