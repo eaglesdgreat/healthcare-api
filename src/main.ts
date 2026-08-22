@@ -13,15 +13,32 @@ async function bootstrap() {
     }),
   )
 
-  // Swagger Doc COnfig
+  // Swagger documentation configuration
   const config = new DocumentBuilder()
     .setTitle('Healthcare Users Authentication & Authorization Service')
     .setDescription(
-      'This is the authentication and authorization service where we get to know the user coming to the platform and what they are allow to access.',
+      'Authentication and authorization service for the Healthcare platform. It handles user signup, activation, login, token rotation, Google sign-in, and user management.',
     )
     .setVersion('3.2.0')
-    .addTag('users', 'Every Information About the users')
-    .addTag('auths')
+    .addTag('app', 'Service-level endpoints such as the health check.')
+    .addTag(
+      'users',
+      'User management endpoints: list, retrieve, restore, soft delete, bulk operations, and permanent delete. Requires a bearer token.',
+    )
+    .addTag(
+      'auths',
+      'Authentication endpoints: signup, login, token refresh, logout, Google sign-in, and account activation. Publicly accessible.',
+    )
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description:
+          'Enter the JWT access token obtained from /login or /refresh.',
+      },
+      'access-token',
+    )
     .build()
   const documentFactory = () => SwaggerModule.createDocument(app, config)
   SwaggerModule.setup('api', app, documentFactory)

@@ -1,7 +1,14 @@
 import { IsString, Matches } from 'class-validator'
 import { Transform } from 'class-transformer'
+import { ApiProperty } from '@nestjs/swagger'
 
 export class ResendActivationDto {
+  @ApiProperty({
+    description:
+      'The email address or phone number associated with the account whose activation code should be resent.',
+    example: 'john.doe@example.com',
+    type: String,
+  })
   @IsString()
   @Transform(({ value }: { value: string }) => {
     if (typeof value !== 'string') return value

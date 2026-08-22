@@ -7,6 +7,7 @@ import {
   ValidatorConstraintInterface,
 } from 'class-validator'
 import { Transform } from 'class-transformer'
+import { ApiProperty } from '@nestjs/swagger'
 
 @ValidatorConstraint({ name: 'isUsernameValid', async: false })
 export class IsUsernameValidConstraint implements ValidatorConstraintInterface {
@@ -29,6 +30,12 @@ export class IsUsernameValidConstraint implements ValidatorConstraintInterface {
 }
 
 export class LoginUserDto {
+  @ApiProperty({
+    description:
+      'The login identifier. Must be one of: a valid email address, an international phone number, or a Health ID (e.g. PAT-XXXXXXXX, HOS-XXXXXXXX, DOC-XXXXXXXX).',
+    example: 'john.doe@example.com',
+    type: String,
+  })
   @IsString()
   @Transform(({ value }: { value: string }) => {
     if (typeof value !== 'string') return value
@@ -48,6 +55,15 @@ export class LoginUserDto {
   @Validate(IsUsernameValidConstraint)
   username: string
 
+  @ApiProperty({
+    description:
+      'Password with at least 8 characters containing an uppercase letter, a lowercase letter, a number, and a special character',
+    example: 'MyStrongPass123!',
+    minLength: 8,
+    format: 'password',
+    writeOnly: true,
+    type: String,
+  })
   @IsString({ message: 'Password must be a string' })
   @MinLength(8, { message: 'Security requires at least 8 characters' })
   @Matches(/[A-Z]/, {
