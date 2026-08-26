@@ -60,18 +60,18 @@ jobs:
   integration-tests:
     runs-on: ubuntu-latest
     env:
-      MYSQL_HOST: 127.0.0.1
-      MYSQL_PORT: 3306
-      MYSQL_USER: root
-      MYSQL_PASSWORD: verysecretsomething
-      MYSQL_DATABASE: ms_auth_test
-      JWT_SECRET: secret
+      MYSQL_HOST: ${{ vars.MYSQL_HOST }}
+      MYSQL_PORT: ${{ vars.MYSQL_PORT }}
+      MYSQL_USER: ${{ vars.MYSQL_USER }}
+      MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+      MYSQL_DATABASE: ${{ vars.MYSQL_DATABASE }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
     services:
       mysql:
         image: mysql:8
         env:
-          MYSQL_ROOT_PASSWORD: verysecretsomething
-          MYSQL_DATABASE: ms_auth_test
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+          MYSQL_DATABASE: ${{ vars.MYSQL_DATABASE }}
         ports:
           - 3306:3306
         options: >-
@@ -123,18 +123,18 @@ jobs:
   e2e-tests:
     runs-on: ubuntu-latest
     env:
-      MYSQL_HOST: 127.0.0.1
-      MYSQL_PORT: 3306
-      MYSQL_USER: root
-      MYSQL_PASSWORD: verysecretsomething
-      MYSQL_DATABASE: ms_auth_test
-      JWT_SECRET: secret
+      MYSQL_HOST: ${{ vars.MYSQL_HOST }}
+      MYSQL_PORT: ${{ vars.MYSQL_PORT }}
+      MYSQL_USER: ${{ vars.MYSQL_USER }}
+      MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+      MYSQL_DATABASE: ${{ vars.MYSQL_DATABASE }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
     services:
       mysql:
         image: mysql:8
         env:
-          MYSQL_ROOT_PASSWORD: verysecretsomething
-          MYSQL_DATABASE: ms_auth_test
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+          MYSQL_DATABASE: ${{ vars.MYSQL_DATABASE }}
         ports:
           - 3306:3306
         options: >-
@@ -186,18 +186,18 @@ jobs:
   docker-release:
     runs-on: ubuntu-latest
     env:
-      MYSQL_HOST: 127.0.0.1
-      MYSQL_PORT: 3306
-      MYSQL_USER: root
-      MYSQL_PASSWORD: verysecretsomething
-      MYSQL_DATABASE: ms_auth_test
-      JWT_SECRET: secret
+      MYSQL_HOST: ${{ vars.MYSQL_HOST }}
+      MYSQL_PORT: ${{ vars.MYSQL_PORT }}
+      MYSQL_USER: ${{ vars.MYSQL_USER }}
+      MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+      MYSQL_DATABASE: ${{ vars.MYSQL_DATABASE }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
     services:
       mysql:
         image: mysql:8
         env:
-          MYSQL_ROOT_PASSWORD: verysecretsomething
-          MYSQL_DATABASE: ms_auth_test
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+          MYSQL_DATABASE: ${{ vars.MYSQL_DATABASE }}
         ports:
           - 3306:3306
         options: >-
@@ -249,12 +249,12 @@ jobs:
       - name: Run container-based integration smoke test
         run: |
           container_id=$(docker run --detach --rm --network host \
-            -e MYSQL_HOST=127.0.0.1 \
-            -e MYSQL_PORT=3306 \
-            -e MYSQL_USER=root \
-            -e MYSQL_PASSWORD=verysecretsomething \
-            -e MYSQL_DATABASE=ms_auth_test \
-            -e JWT_SECRET=secret \
+            -e MYSQL_HOST="$MYSQL_HOST" \
+            -e MYSQL_PORT="$MYSQL_PORT" \
+            -e MYSQL_USER="$MYSQL_USER" \
+            -e MYSQL_PASSWORD="$MYSQL_PASSWORD" \
+            -e MYSQL_DATABASE="$MYSQL_DATABASE" \
+            -e JWT_SECRET="$JWT_SECRET" \
             -e PORT=5501 \
             local/ms-auth:${{ github.sha }})
           trap "docker stop $container_id" EXIT
@@ -277,7 +277,7 @@ jobs:
           echo "Signup status: $status"
           cat /tmp/signup.json
           if [ "$status" != "201" ]; then exit 1; fi
-          row=$(mysql -h127.0.0.1 -P3306 -uroot -pverysecretsomething -D ms_auth_test -se \
+          row=$(mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" -D "$MYSQL_DATABASE" -se \
             "SELECT health_id FROM users WHERE email='ci-smoke@example.com';")
           if [ -z "$row" ]; then echo "No signup record found in DB"; exit 1; fi
           echo "Smoke test passed. User created with health_id=$row"

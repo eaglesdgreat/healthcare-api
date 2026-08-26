@@ -76,7 +76,7 @@ shell:
 
 .PHONY: mysql
 mysql:
-	docker-compose -p ${project} exec ${service}-db mysql -u root -pverysecretsomething
+	docker-compose -p ${project} exec ${service}-db mysql -u root -p
 
 .PHONY: test
 test: start test-exec
