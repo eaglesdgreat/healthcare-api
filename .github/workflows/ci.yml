@@ -21,8 +21,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: 'pnpm'
+          node-version: "24"
+          cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
@@ -47,8 +47,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: 'pnpm'
+          node-version: "24"
+          cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
@@ -90,8 +90,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: 'pnpm'
+          node-version: "24"
+          cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
@@ -153,8 +153,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: 'pnpm'
+          node-version: "24"
+          cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
@@ -186,12 +186,13 @@ jobs:
   docker-release:
     runs-on: ubuntu-latest
     env:
-      MYSQL_HOST: ${{ vars.MYSQL_HOST }}
-      MYSQL_PORT: ${{ vars.MYSQL_PORT }}
-      MYSQL_USER: ${{ vars.MYSQL_USER }}
+      MYSQL_HOST: localhost
+      MYSQL_PORT: 3306
+      MYSQL_USER: auth_user
       MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
       MYSQL_DATABASE: ${{ vars.MYSQL_DATABASE }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
     services:
       mysql:
         image: mysql:8
@@ -216,8 +217,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: 'pnpm'
+          node-version: "24"
+          cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
@@ -226,20 +227,34 @@ jobs:
       - name: Install MySQL client
         run: sudo apt-get update && sudo apt-get install -y default-mysql-client
 
-      - name: Build release Docker image
-        run: docker build --target release -t local/ms-auth:${{ github.sha }} .
-
-      - name: Wait for MySQL
+      - name: Wait for MySQL and create auth_user
         run: |
           echo "Waiting for MySQL to be healthy..."
           for i in {1..30}; do
-            if mysqladmin ping -h "$MYSQL_HOST" -P "$MYSQL_PORT" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" >/dev/null 2>&1; then
+            if mysqladmin ping -h localhost -P 3306 -u root -p"$MYSQL_ROOT_PASSWORD" >/dev/null 2>&1; then
               echo "MySQL is up"
+              mysql_ready=true
               break
             fi
             echo "MySQL not ready yet, sleeping..."
             sleep 2
           done
+          if [ "$mysql_ready" != "true" ]; then
+            echo "MySQL did not become healthy in time"
+            exit 1
+          fi
+
+          echo "Creating auth_user and granting permissions..."
+          mysql -h localhost -P 3306 -u root -p"$MYSQL_ROOT_PASSWORD" <<EOF
+          CREATE USER IF NOT EXISTS 'auth_user'@'%' IDENTIFIED BY '$MYSQL_PASSWORD';
+          GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO 'auth_user'@'%';
+          FLUSH PRIVILEGES;
+          EOF
+
+          echo "User created successfully"
+
+      - name: Build release Docker image
+        run: docker build --target release -t local/ms-auth:${{ github.sha }} .
 
       - name: Run database migrations
         run: pnpm run migrate:up --env=dev
@@ -258,26 +273,46 @@ jobs:
             -e PORT=5501 \
             local/ms-auth:${{ github.sha }})
           trap "docker stop $container_id" EXIT
+
+          echo "Waiting for app to be ready..."
           for i in $(seq 1 30); do
             if curl -sSf http://127.0.0.1:5501/ >/dev/null 2>&1; then
               echo "App is responding"
               app_ready=true
               break
             fi
+            echo "App not ready yet, sleeping..."
             sleep 2
           done
           if [ "$app_ready" != "true" ]; then
             echo "Release container never became ready"
+            docker logs $container_id
             exit 1
           fi
+
           # Smoke: signup creates a 201 and record is persisted
+          echo "Running smoke test: signup..."
           status=$(curl -s -o /tmp/signup.json -w '%{http_code}' -X POST http://127.0.0.1:5501/signup \
             -H 'Content-Type: application/json' \
             -d '{"firstName":"ci","lastName":"smoke","email":"ci-smoke@example.com","phoneNumber":"+12345678901","role":"PATIENT","password":"Abcd1234!"}')
           echo "Signup status: $status"
           cat /tmp/signup.json
-          if [ "$status" != "201" ]; then exit 1; fi
+          echo ""
+
+          if [ "$status" != "201" ]; then 
+            echo "Signup failed with status $status"
+            docker logs $container_id
+            exit 1
+          fi
+
+          # Verify the user was created in the database
           row=$(mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" -D "$MYSQL_DATABASE" -se \
             "SELECT health_id FROM users WHERE email='ci-smoke@example.com';")
-          if [ -z "$row" ]; then echo "No signup record found in DB"; exit 1; fi
+
+          if [ -z "$row" ]; then 
+            echo "No signup record found in DB"
+            docker logs $container_id
+            exit 1
+          fi
+
           echo "Smoke test passed. User created with health_id=$row"
