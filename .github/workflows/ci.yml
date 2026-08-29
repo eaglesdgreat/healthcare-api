@@ -68,7 +68,7 @@ jobs:
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
     services:
       mysql:
-        image: mysql:8.0
+        image: mysql:8
         env:
           MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
           MYSQL_ROOT_HOST: '%'
@@ -125,23 +125,21 @@ jobs:
   e2e-tests:
     runs-on: ubuntu-latest
     env:
-      MYSQL_HOST: 127.0.0.1
-      MYSQL_PORT: 3306
-      MYSQL_USER: ${{ vars.MYSQL_USER || 'root' }}
+      MYSQL_HOST: ${{ vars.MYSQL_HOST }}
+      MYSQL_PORT: ${{ vars.MYSQL_PORT }}
+      MYSQL_USER: ${{ vars.MYSQL_USER }}
       MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
-      MYSQL_DATABASE: ${{ vars.MYSQL_DATABASE || 'ms_auth_test' }}
+      MYSQL_DATABASE: ${{ vars.MYSQL_DATABASE }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
     services:
       mysql:
-        image: mysql:8.0
+        image: mysql:8
         env:
-          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
-          MYSQL_ROOT_HOST: '%'
-          MYSQL_DATABASE: ${{ vars.MYSQL_DATABASE || 'ms_auth_test' }}
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+          MYSQL_DATABASE: ${{ vars.MYSQL_DATABASE }}
         ports:
           - 3306:3306
         options: >-
-          --default-authentication-plugin=mysql_native_password
           --health-cmd="mysqladmin ping --silent"
           --health-interval=5s
           --health-timeout=2s
@@ -190,23 +188,21 @@ jobs:
   docker-release:
     runs-on: ubuntu-latest
     env:
-      MYSQL_HOST: 127.0.0.1
-      MYSQL_PORT: 3306
-      MYSQL_USER: ${{ vars.MYSQL_USER || 'root' }}
+      MYSQL_HOST: ${{ vars.MYSQL_HOST }}
+      MYSQL_PORT: ${{ vars.MYSQL_PORT }}
+      MYSQL_USER: ${{ vars.MYSQL_USER }}
       MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
-      MYSQL_DATABASE: ${{ vars.MYSQL_DATABASE || 'ms_auth_test' }}
+      MYSQL_DATABASE: ${{ vars.MYSQL_DATABASE }}
       JWT_SECRET: ${{ secrets.JWT_SECRET }}
     services:
       mysql:
-        image: mysql:8.0
+        image: mysql:8
         env:
-          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
-          MYSQL_ROOT_HOST: '%'
-          MYSQL_DATABASE: ${{ vars.MYSQL_DATABASE || 'ms_auth_test' }}
+          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
+          MYSQL_DATABASE: ${{ vars.MYSQL_DATABASE }}
         ports:
           - 3306:3306
         options: >-
-          --default-authentication-plugin=mysql_native_password
           --health-cmd="mysqladmin ping --silent"
           --health-interval=5s
           --health-timeout=2s
