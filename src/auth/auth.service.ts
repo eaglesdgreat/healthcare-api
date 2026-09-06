@@ -5,6 +5,8 @@ import {
   ForbiddenException,
   ConflictException,
   BadRequestException,
+  HttpException,
+  Logger,
 } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { UsersService } from '@/users/users.service'
@@ -18,14 +20,23 @@ import { randomBytes, createHash } from 'crypto'
 import { RefreshToken } from './entities/refresh-token.entity'
 import { GoogleAuthService } from './google-auth.service'
 import { GoogleSignInDto } from './dto/google-signin.dto'
+import { MetricsService } from '@/common/metrics/metrics.service'
 
 @Injectable()
 export class AuthService {
+  // Instantiated directly (not constructor-injected) so this keeps working
+  // in unit tests that build a minimal TestingModule without importing the
+  // real LoggerModule. Once the app calls `app.useLogger(app.get(Logger))`
+  // (see main.ts) at bootstrap, every `new Logger(...)` instance across the
+  // app automatically routes through the structured pino logger.
+  private readonly logger = new Logger(AuthService.name)
+
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly eventBus: EventBusService,
     private readonly googleAuthService: GoogleAuthService,
+    private readonly metrics: MetricsService,
 
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
@@ -43,6 +54,7 @@ export class AuthService {
     })
 
     if (existingUser) {
+      this.metrics.authSignupTotal.inc({ result: 'conflict' })
       if (existingUser.email === email) {
         throw new ConflictException(
           'A user with this email address already exists',
@@ -60,8 +72,6 @@ export class AuthService {
       const healthId = await this.usersService.generateHealthId(role)
       const activationToken = randomBytes(8).toString('hex')
       const activationTokenHash = this.hashValue(activationToken)
-      // TEMP: log the real token for local testing until the notification service is built
-      console.log('ACTIVATION TOKEN:', activationToken)
       const activationExpiresAt = new Date()
       activationExpiresAt.setHours(activationExpiresAt.getHours() + 24)
 
@@ -89,12 +99,19 @@ export class AuthService {
         role,
       })
 
+      this.logger.log(
+        { healthId, role },
+        'User signed up and pending-activation event emitted',
+      )
+      this.metrics.authSignupTotal.inc({ result: 'success' })
+
       return {
         message:
           'Registration successful. Activation token has been sent to the provided contact method. Use it to activate your account.',
       }
     } catch (error) {
-      console.error(error)
+      this.metrics.authSignupTotal.inc({ result: 'error' })
+      this.logger.error({ err: error }, 'Failed to provision new user account')
       if (error instanceof Error) {
         throw error
       }
@@ -112,16 +129,24 @@ export class AuthService {
 
       if (user) {
         if (!user.password || !(await this.verifyPassword(user, password))) {
+          this.metrics.authLoginTotal.inc({ result: 'invalid_credentials' })
           throw new UnauthorizedException('Invalid credentials')
         }
 
         if (!user.isActive) {
+          this.metrics.authLoginTotal.inc({ result: 'not_activated' })
           throw new ForbiddenException('Account not activated')
         }
 
         const { accessToken, refreshToken } = await this.generateTokens(user)
         const { password: _password, ...userResponse } = user
         void _password
+
+        this.metrics.authLoginTotal.inc({ result: 'success' })
+        this.logger.log(
+          { healthId: user.healthId },
+          'User logged in successfully',
+        )
 
         return {
           data: userResponse,
@@ -132,12 +157,18 @@ export class AuthService {
         }
       }
 
+      this.metrics.authLoginTotal.inc({ result: 'not_found' })
       throw new UnauthorizedException('Signup to create user')
     } catch (error) {
-      console.error(error)
-      if (error instanceof Error) {
+      // Expected auth failures (wrong password, inactive account, unknown
+      // user) were already recorded above and are logged globally by the
+      // exception filter; only unexpected system errors need extra
+      // handling here.
+      if (error instanceof HttpException) {
         throw error
       }
+      this.metrics.authLoginTotal.inc({ result: 'error' })
+      this.logger.error({ err: error }, 'Unexpected error during login')
       throw new InternalServerErrorException('Failed to login user')
     }
   }
@@ -162,58 +193,84 @@ export class AuthService {
       throw new UnauthorizedException('Google email has not been verified')
     }
 
-    const user = await this.usersService.findUserByUsername(email)
+    try {
+      const user = await this.usersService.findUserByUsername(email)
 
-    if (user) {
-      if (!user.isActive) {
-        throw new ForbiddenException('Account not activated')
+      if (user) {
+        if (!user.isActive) {
+          this.metrics.authLoginTotal.inc({ result: 'not_activated' })
+          throw new ForbiddenException('Account not activated')
+        }
+        const { accessToken, refreshToken } = await this.generateTokens(user)
+        const { password: _password, ...userResponse } = user
+        void _password
+
+        this.metrics.authLoginTotal.inc({ result: 'google_success' })
+        this.logger.log(
+          { healthId: user.healthId },
+          'User signed in with Google',
+        )
+
+        return {
+          data: userResponse,
+          meta: {
+            accessToken,
+            refreshToken,
+          },
+        }
       }
-      const { accessToken, refreshToken } = await this.generateTokens(user)
-      const { password: _password, ...userResponse } = user
-      void _password
+
+      const assignedRole = role || UserRole.PATIENT
+      const healthId = await this.usersService.generateHealthId(assignedRole)
+      const activationToken = randomBytes(24).toString('hex')
+      const activationTokenHash = this.hashValue(activationToken)
+      const activationExpiresAt = new Date()
+      activationExpiresAt.setHours(activationExpiresAt.getHours() + 24)
+
+      const newUser = this.usersRepository.create({
+        firstName: payload.given_name || '',
+        lastName: payload.family_name || '',
+        email,
+        phoneNumber: payload.phone_number || '',
+        password: null,
+        role: assignedRole,
+        healthId,
+        isActive: false,
+        activationTokenHash,
+        activationExpiresAt,
+      } as DeepPartial<User>)
+
+      await this.usersRepository.save(newUser)
+      this.eventBus.emit('user.pending_activation', {
+        email,
+        phoneNumber: payload.phone_number || null,
+        healthId,
+        activationToken,
+        activationExpiresAt: activationExpiresAt.toISOString(),
+        role: assignedRole,
+        source: 'google',
+      })
+
+      this.metrics.authSignupTotal.inc({ result: 'google_provisioned' })
+      this.logger.log(
+        { healthId, role: assignedRole },
+        'New account provisioned via Google sign-in, pending activation',
+      )
+
       return {
-        data: userResponse,
-        meta: {
-          accessToken,
-          refreshToken,
-        },
+        message:
+          'Google login succeeded. A pending activation event was emitted so the account can be activated before first use.',
       }
-    }
-
-    const assignedRole = role || UserRole.PATIENT
-    const healthId = await this.usersService.generateHealthId(assignedRole)
-    const activationToken = randomBytes(24).toString('hex')
-    const activationTokenHash = this.hashValue(activationToken)
-    const activationExpiresAt = new Date()
-    activationExpiresAt.setHours(activationExpiresAt.getHours() + 24)
-
-    const newUser = this.usersRepository.create({
-      firstName: payload.given_name || '',
-      lastName: payload.family_name || '',
-      email,
-      phoneNumber: payload.phone_number || '',
-      password: null,
-      role: assignedRole,
-      healthId,
-      isActive: false,
-      activationTokenHash,
-      activationExpiresAt,
-    } as DeepPartial<User>)
-
-    await this.usersRepository.save(newUser)
-    this.eventBus.emit('user.pending_activation', {
-      email,
-      phoneNumber: payload.phone_number || null,
-      healthId,
-      activationToken,
-      activationExpiresAt: activationExpiresAt.toISOString(),
-      role: assignedRole,
-      source: 'google',
-    })
-
-    return {
-      message:
-        'Google login succeeded. A pending activation event was emitted so the account can be activated before first use.',
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error
+      }
+      this.metrics.authLoginTotal.inc({ result: 'error' })
+      this.logger.error(
+        { err: error },
+        'Unexpected error during Google sign-in',
+      )
+      throw new InternalServerErrorException('Failed to process Google sign-in')
     }
   }
 
@@ -231,6 +288,7 @@ export class AuthService {
       })
 
       if (!storedToken || storedToken.expiresAt < new Date()) {
+        this.metrics.authTokenRefreshTotal.inc({ result: 'invalid_token' })
         throw new UnauthorizedException('Invalid or expired refresh token')
       }
 
@@ -239,6 +297,7 @@ export class AuthService {
       })
 
       if (!user || !user.isActive) {
+        this.metrics.authTokenRefreshTotal.inc({ result: 'invalid_token' })
         throw new UnauthorizedException('Invalid refresh token')
       }
 
@@ -246,15 +305,24 @@ export class AuthService {
       await this.refreshTokenRepository.save(storedToken)
 
       const tokens = await this.generateTokens(user)
+      this.metrics.authTokenRefreshTotal.inc({ result: 'success' })
+      this.logger.log(
+        { healthId: user.healthId },
+        'Refresh token rotated successfully',
+      )
       return tokens
     } catch (error) {
-      console.error(error)
       if (
         error instanceof UnauthorizedException ||
         error instanceof BadRequestException
       ) {
         throw error
       }
+      this.metrics.authTokenRefreshTotal.inc({ result: 'error' })
+      this.logger.error(
+        { err: error },
+        'Unexpected error while refreshing authentication tokens',
+      )
       throw new InternalServerErrorException(
         'Failed to refresh authentication tokens',
       )
@@ -354,8 +422,6 @@ export class AuthService {
       }
 
       const activationToken = randomBytes(8).toString('hex')
-      // TEMP: log the real token for local testing until the notification service is built
-      console.log('ACTIVATION TOKEN:', activationToken)
       const activationTokenHash = this.hashValue(activationToken)
       const activationExpiresAt = new Date()
       activationExpiresAt.setHours(activationExpiresAt.getHours() + 24)
@@ -376,18 +442,26 @@ export class AuthService {
         resend: true,
       })
 
+      this.logger.log(
+        { healthId: user.healthId },
+        'Activation token resent and pending-activation event emitted',
+      )
+
       return {
         message:
           'A new activation code has been sent. Use it to activate your account before it expires.',
       }
     } catch (error) {
-      console.error(error)
       if (
         error instanceof UnauthorizedException ||
         error instanceof BadRequestException
       ) {
         throw error
       }
+      this.logger.error(
+        { err: error },
+        'Unexpected error while resending activation code',
+      )
       throw new InternalServerErrorException('Failed to resend activation code')
     }
   }
@@ -409,10 +483,12 @@ export class AuthService {
       })
 
       if (!user) {
+        this.metrics.authActivationTotal.inc({ result: 'not_found' })
         throw new UnauthorizedException('Invalid activation details')
       }
 
       if (user.isActive) {
+        this.metrics.authActivationTotal.inc({ result: 'already_activated' })
         return { message: 'Account already activated' }
       }
 
@@ -420,6 +496,7 @@ export class AuthService {
         !user.activationTokenHash ||
         user.activationTokenHash !== this.hashValue(token)
       ) {
+        this.metrics.authActivationTotal.inc({ result: 'invalid_token' })
         throw new UnauthorizedException('Invalid or expired activation token')
       }
 
@@ -427,6 +504,7 @@ export class AuthService {
         user.activationExpiresAt &&
         new Date() > new Date(user.activationExpiresAt)
       ) {
+        this.metrics.authActivationTotal.inc({ result: 'expired_token' })
         throw new UnauthorizedException('Activation token has expired')
       }
 
@@ -443,10 +521,17 @@ export class AuthService {
         role: user.role,
       })
 
+      this.metrics.authActivationTotal.inc({ result: 'success' })
+      this.logger.log({ healthId: user.healthId }, 'Account activated')
+
       return { message: 'Account activated successfully' }
     } catch (error) {
-      console.error(error)
-      if (error instanceof Error) throw error
+      if (error instanceof HttpException) throw error
+      this.metrics.authActivationTotal.inc({ result: 'error' })
+      this.logger.error(
+        { err: error },
+        'Unexpected error while activating account',
+      )
       throw new InternalServerErrorException('Failed to activate account')
     }
   }

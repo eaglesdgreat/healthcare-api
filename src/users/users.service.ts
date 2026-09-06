@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common'
 import { Repository, DeepPartial, Like, FindOptionsWhere } from 'typeorm'
 import { User } from './entities/user.entity'
@@ -13,6 +14,11 @@ import type { PaginationResponse } from '@/common/interfaces/user.interface'
 
 @Injectable()
 export class UsersService {
+  // Instantiated directly (not constructor-injected) so this keeps working
+  // in unit tests that build a minimal TestingModule without importing the
+  // real LoggerModule. See auth.service.ts for the full rationale.
+  private readonly logger = new Logger(UsersService.name)
+
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
@@ -37,13 +43,13 @@ export class UsersService {
 
       return newUser
     } catch (error) {
-      console.error(error)
       if (
         error instanceof NotFoundException ||
         error instanceof ConflictException
       ) {
         throw error
       }
+      this.logger.error({ err: error }, 'Failed to create user')
       throw new InternalServerErrorException('Failed to create user')
     }
   }
@@ -79,13 +85,16 @@ export class UsersService {
         user: deletedUser as User,
       }
     } catch (error: unknown) {
-      console.error(error)
       if (
         error instanceof NotFoundException ||
         error instanceof ConflictException
       ) {
         throw error
       }
+      this.logger.error(
+        { err: error, userId: id },
+        'Failed to soft delete user',
+      )
       throw new InternalServerErrorException('Failed to soft delete user')
     }
   }
@@ -121,13 +130,13 @@ export class UsersService {
         user: restoredUser as User,
       }
     } catch (error: unknown) {
-      console.error(error)
       if (
         error instanceof NotFoundException ||
         error instanceof ConflictException
       ) {
         throw error
       }
+      this.logger.error({ err: error, userId: id }, 'Failed to restore user')
       throw new InternalServerErrorException('Failed to restore user')
     }
   }
@@ -152,10 +161,13 @@ export class UsersService {
         message: `User with ID ${id} has been permanently deleted`,
       }
     } catch (error: unknown) {
-      console.error(error)
       if (error instanceof NotFoundException) {
         throw error
       }
+      this.logger.error(
+        { err: error, userId: id },
+        'Failed to permanently delete user',
+      )
       throw new InternalServerErrorException(
         'Failed to permanently delete user',
       )
@@ -237,10 +249,10 @@ export class UsersService {
         },
       }
     } catch (error) {
-      console.error(error)
       if (error instanceof NotFoundException) {
         throw error
       }
+      this.logger.error({ err: error }, 'Failed to fetch all users')
       throw new InternalServerErrorException('Failed to fetch all users')
     }
   }
@@ -268,10 +280,10 @@ export class UsersService {
 
       return user
     } catch (error: unknown) {
-      console.error(error)
       if (error instanceof NotFoundException) {
         throw error
       }
+      this.logger.error({ err: error, userId: id }, 'Failed to fetch user')
       throw new InternalServerErrorException('Failed to fetch user')
     }
   }
@@ -297,10 +309,10 @@ export class UsersService {
 
       return user
     } catch (error) {
-      console.error(error)
       if (error instanceof NotFoundException) {
         throw error
       }
+      this.logger.error({ err: error }, 'Failed to fetch user by identifier')
       throw new InternalServerErrorException('Failed to fetch user')
     }
   }
@@ -317,10 +329,10 @@ export class UsersService {
         deletedCount: result.affected || 0,
       }
     } catch (error: unknown) {
-      console.error(error)
       if (error instanceof NotFoundException) {
         throw error
       }
+      this.logger.error({ err: error }, 'Failed to bulk soft delete users')
       throw new InternalServerErrorException('Failed to bulk soft delete users')
     }
   }
@@ -337,10 +349,10 @@ export class UsersService {
         restoredCount: result.affected || 0,
       }
     } catch (error: unknown) {
-      console.error(error)
       if (error instanceof NotFoundException) {
         throw error
       }
+      this.logger.error({ err: error }, 'Failed to bulk restore users')
       throw new InternalServerErrorException('Failed to bulk restore users')
     }
   }

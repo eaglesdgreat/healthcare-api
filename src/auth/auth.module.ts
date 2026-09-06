@@ -12,6 +12,7 @@ import { User } from '@/users/entities/user.entity'
 import { EventBusModule } from '@/common/event-bus.module'
 import { RefreshToken } from './entities/refresh-token.entity'
 import { GoogleAuthService } from './google-auth.service'
+import { MetricsModule } from '@/common/metrics/metrics.module'
 
 @Module({
   providers: [
@@ -25,6 +26,7 @@ import { GoogleAuthService } from './google-auth.service'
   imports: [
     ConfigModule,
     EventBusModule,
+    MetricsModule,
     TypeOrmModule.forFeature([User, RefreshToken]),
     JwtModule.registerAsync({
       global: true,

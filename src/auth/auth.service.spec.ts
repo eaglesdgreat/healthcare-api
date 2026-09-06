@@ -7,6 +7,7 @@ import { getRepositoryToken } from '@nestjs/typeorm'
 import { User, UserRole } from '@/users/entities/user.entity'
 import { RefreshToken } from './entities/refresh-token.entity'
 import { GoogleAuthService } from './google-auth.service'
+import { MetricsService } from '@/common/metrics/metrics.service'
 import { createHash } from 'crypto'
 import * as bcrypt from 'bcrypt'
 import {
@@ -86,6 +87,7 @@ describe('AuthService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
+        MetricsService,
         { provide: UsersService, useValue: mockUsersService },
         { provide: EventBusService, useValue: mockEventBus },
         { provide: JwtService, useValue: mockJwtService },
