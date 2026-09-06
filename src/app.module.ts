@@ -8,9 +8,13 @@ import { AuthModule } from '@/auth/auth.module'
 import { ConfigService } from '@nestjs/config'
 import { APP_FILTER } from '@nestjs/core/constants'
 import { HttpExceptionFilter } from '@/common/filters/http-exception.filter'
+import { LoggerModule } from '@/common/logger/logger.module'
+import { HealthModule } from '@/common/health/health.module'
+import { MetricsModule } from '@/common/metrics/metrics.module'
 
 @Module({
   imports: [
+    LoggerModule,
     ConfigModule.forRoot({
       isGlobal: true, // Makes the configuration available globally
     }),
@@ -34,6 +38,8 @@ import { HttpExceptionFilter } from '@/common/filters/http-exception.filter'
         // which fails with "Cannot read properties of undefined (reading 'dbmigrate')".
       }),
     }),
+    HealthModule,
+    MetricsModule,
     AuthModule,
     UsersModule,
   ],

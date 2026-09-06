@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import { EventEmitter } from 'events'
 
 export interface EventPayload {
@@ -7,6 +7,7 @@ export interface EventPayload {
 
 @Injectable()
 export class EventBusService {
+  private readonly logger = new Logger(EventBusService.name)
   private readonly emitter = new EventEmitter()
   private readonly brokerUrl = process.env.EVENT_BUS_URL
 
@@ -55,7 +56,10 @@ export class EventBusService {
         }),
       })
     } catch (error) {
-      console.warn('Failed to publish event to broker:', error)
+      this.logger.warn(
+        { err: error, event },
+        'Failed to publish event to external broker',
+      )
     }
   }
 }

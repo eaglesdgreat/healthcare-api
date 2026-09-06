@@ -2,9 +2,15 @@ import { NestFactory } from '@nestjs/core'
 import { AppModule } from './app.module'
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger'
 import { ValidationPipe } from '@nestjs/common'
+import { Logger } from 'nestjs-pino'
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule)
+  // Buffer logs until the pino logger is attached below, so nothing
+  // emitted during module initialization is lost or falls back to
+  // Nest's default console logger.
+  const app = await NestFactory.create(AppModule, { bufferLogs: true })
+  app.useLogger(app.get(Logger))
+  const logger = app.get(Logger)
 
   // Global Validation Config
   app.useGlobalPipes(
@@ -43,12 +49,12 @@ async function bootstrap() {
   const documentFactory = () => SwaggerModule.createDocument(app, config)
   SwaggerModule.setup('api', app, documentFactory)
 
-  await app.listen(process.env.PORT ?? 3000)
+  const port = process.env.PORT ?? 3000
+  await app.listen(port)
+  logger.log(`Application is running on port ${port}`, 'Bootstrap')
 }
-bootstrap()
-  .then(() => {
-    console.log('Application is running on port', process.env.PORT ?? 3000)
-  })
-  .catch((error) => {
-    console.error('Error starting application:', error)
-  })
+bootstrap().catch((error: unknown) => {
+  // available yet if bootstrap itself failed to initialize.
+  console.error('Error starting application:', error)
+  process.exit(1)
+})
