@@ -23,10 +23,14 @@ async function bootstrap() {
   const config = new DocumentBuilder()
     .setTitle('Healthcare Users Authentication & Authorization Service')
     .setDescription(
-      'Authentication and authorization service for the Healthcare platform. It handles user signup, activation, login, token rotation, Google sign-in, and user management.',
+      'Authentication and authorization service for the Healthcare platform. It handles user signup, activation, login, token rotation, Google sign-in, user management, readiness checks, and Prometheus metrics.',
     )
     .setVersion('3.2.0')
     .addTag('app', 'Service-level endpoints such as the health check.')
+    .addTag(
+      'observability',
+      'Public readiness and Prometheus scrape endpoints for platform operations.',
+    )
     .addTag(
       'users',
       'User management endpoints: list, retrieve, restore, soft delete, bulk operations, and permanent delete. Requires a bearer token.',
