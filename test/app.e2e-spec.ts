@@ -22,4 +22,33 @@ describe('AppController (e2e)', () => {
       .expect(200)
       .expect('Hello World!')
   })
+
+  it('/health (GET)', () => {
+    return request(app.getHttpServer())
+      .get('/health')
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(
+          expect.objectContaining({
+            status: 'ok',
+            info: expect.objectContaining({
+              database: expect.objectContaining({ status: 'up' }) as string,
+              memory_heap: expect.objectContaining({ status: 'up' }) as string,
+              memory_rss: expect.objectContaining({ status: 'up' }) as string,
+            }) as Record<string, unknown>,
+          }),
+        )
+      })
+  })
+
+  it('/metrics (GET)', () => {
+    return request(app.getHttpServer())
+      .get('/metrics')
+      .expect('Content-Type', /text\/plain/)
+      .expect(200)
+      .expect((response) => {
+        expect(response.text).toContain('http_requests_total')
+        expect(response.text).toContain('process_cpu_user_seconds_total')
+      })
+  })
 })

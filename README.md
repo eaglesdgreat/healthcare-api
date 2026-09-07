@@ -219,3 +219,43 @@ Deployment notes
 - Consider adding centralized logging and monitoring for auditability and alerting.
 
 If you update the code that affects the behavior documented above (for example token lifetimes, endpoint names, or payload contents), update this README accordingly so future maintainers have a single source of truth.
+
+### 6. Observability and diagnostics
+
+This service emits structured Pino logs and Prometheus metrics so it can be operated consistently with the other healthcare microservices. Logs include a request correlation ID (`x-request-id`), which is returned to callers and should be supplied when reporting an issue. Authentication headers, cookies, passwords, and tokens are redacted before a log is emitted.
+
+| Endpoint       | Authentication                                      | Purpose                                                                                                                                                                  |
+| -------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET /health`  | Public                                              | Readiness probe. It verifies MySQL connectivity and configured heap/RSS memory limits. Returns `200` only when the instance can accept traffic; returns `503` otherwise. |
+| `GET /metrics` | Public; restrict it at the gateway or network layer | Prometheus text-format metrics for service/process health, HTTP request count/latency, and authentication outcomes.                                                      |
+| `GET /api`     | Public                                              | Swagger UI, including endpoint descriptions and success/failure response examples.                                                                                       |
+
+The health endpoint accepts no request body. A healthy response is:
+
+```json
+{
+  "status": "ok",
+  "info": {
+    "database": { "status": "up" },
+    "memory_heap": { "status": "up" },
+    "memory_rss": { "status": "up" }
+  },
+  "error": {},
+  "details": {}
+}
+```
+
+All HTTP failures use a common response envelope. Keep the `requestId` when escalating an issue; it links the client-visible error to the structured logs.
+
+```json
+{
+  "type": "Invalid credentials",
+  "statusCode": 401,
+  "timestamp": "2026-09-07T10:15:30.000Z",
+  "path": "/login",
+  "requestId": "7a1b2c3d-4e5f-6789-abcd-ef0123456789",
+  "response": { "message": "Invalid credentials", "statusCode": 401 }
+}
+```
+
+Do not expose `/metrics` directly to the public internet in production. Permit only the Prometheus scraper, service network, or an authenticated gateway route to access it.

@@ -37,9 +37,52 @@ export class HealthController {
     description:
       'Verifies the service and its dependencies (MySQL database connectivity, memory usage) are healthy. Intended for load balancer / orchestrator readiness probes, not for end users.',
   })
-  @ApiOkResponse({ description: 'All dependencies are healthy.' })
+  @ApiOkResponse({
+    description:
+      'The service can receive traffic. No authentication or request body is required.',
+    schema: {
+      example: {
+        status: 'ok',
+        info: {
+          database: { status: 'up' },
+          memory_heap: { status: 'up' },
+          memory_rss: { status: 'up' },
+        },
+        error: {},
+        details: {
+          database: { status: 'up' },
+          memory_heap: { status: 'up' },
+          memory_rss: { status: 'up' },
+        },
+      },
+    },
+  })
   @ApiServiceUnavailableResponse({
-    description: 'One or more dependencies are unhealthy.',
+    description:
+      'The service must not receive traffic because one or more dependencies are unhealthy.',
+    schema: {
+      example: {
+        status: 'error',
+        info: {
+          memory_heap: { status: 'up' },
+          memory_rss: { status: 'up' },
+        },
+        error: {
+          database: {
+            status: 'down',
+            message: 'Database connection failed',
+          },
+        },
+        details: {
+          database: {
+            status: 'down',
+            message: 'Database connection failed',
+          },
+          memory_heap: { status: 'up' },
+          memory_rss: { status: 'up' },
+        },
+      },
+    },
   })
   check(): Promise<HealthCheckResult> {
     return this.health.check([

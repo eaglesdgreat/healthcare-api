@@ -193,3 +193,39 @@ Input Sanitization Constraints: Strict structural transformations via class-tran
 This completed design block can be written directly to your project root as DESIGN_AUTH.md. It perfectly outlines your decoupled service structures.
 
 Now that this is fully documented, shall we proceed with the Technical Design Document for the Medical Appointment Microservice Architecture?
+
+6. ## Observability, Monitoring, and Error Diagnostics
+
+The Auth Service produces service-local observability signals that are collected by the shared platform observability stack. This keeps domain context close to the code while enabling cross-service dashboards, alerting, and incident investigation.
+
+#### 6.1 Structured Logging
+
+- The application uses Pino through `nestjs-pino`. Production logs are JSON; local development logs are pretty-printed.
+- Every incoming request is assigned an `x-request-id` or reuses the caller-supplied value. The same value is included in the response and structured logs, allowing support staff to correlate an API error with its server-side log entries.
+- Sensitive values are redacted before logging: authorization headers, cookies, passwords, refresh tokens, Google ID tokens, and generic token fields.
+- Successful authentication and lifecycle operations log Health IDs and outcomes, never credentials or activation tokens. Unexpected faults include the original error for operational investigation.
+
+#### 6.2 Metrics and Readiness
+
+`GET /health` is a public readiness probe for the gateway, orchestrator, and load balancer. It checks MySQL connectivity with a 3-second timeout, heap usage below 300 MiB, and resident set size (RSS) below 500 MiB. It returns `200` with `status: "ok"` only when every dependency is healthy; otherwise it returns `503` with `status: "error"`. It accepts no request body.
+
+`GET /metrics` exposes Prometheus text-format metrics: default Node.js process metrics, HTTP request count/latency by method, matched route, and status code, and authentication counters labeled by outcome for signup, login, activation, and refresh-token operations. Metrics scraping is excluded from HTTP metrics so polling does not distort service traffic figures.
+
+Both endpoints are unauthenticated to support infrastructure probes. Production ingress must restrict `/metrics` to the Prometheus scraper or private service network; `/health` may be reachable by the load balancer as required.
+
+#### 6.3 Error Response Contract
+
+All HTTP exceptions are formatted by the global exception filter. The response contract is:
+
+```json
+{
+  "type": "Invalid credentials",
+  "statusCode": 401,
+  "timestamp": "2026-09-07T10:15:30.000Z",
+  "path": "/login",
+  "requestId": "7a1b2c3d-4e5f-6789-abcd-ef0123456789",
+  "response": { "message": "Invalid credentials", "statusCode": 401 }
+}
+```
+
+Expected client errors (4xx) are logged at warning level without a stack trace. Unexpected errors and all 5xx failures are logged at error level with their stack trace and request context. Clients must treat `response` as the underlying Nest error payload and `requestId` as the support correlation key.
