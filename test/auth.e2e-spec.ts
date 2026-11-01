@@ -24,13 +24,18 @@ describe('Auth E2E (mysql)', () => {
 
   beforeAll(async () => {
     // E2E tests run against the project's MySQL instance (CI provides a service).
+    if (!process.env.MYSQL_USER || !process.env.MYSQL_PASSWORD) {
+      throw new Error(
+        'MYSQL_USER and MYSQL_PASSWORD must be set to run auth E2E tests',
+      )
+    }
 
     const dbConfig = {
       type: 'mysql' as const,
       host: process.env.MYSQL_HOST || '127.0.0.1',
       port: Number(process.env.MYSQL_PORT) || 3306,
-      username: process.env.MYSQL_USER || 'root',
-      password: process.env.MYSQL_PASSWORD || 'verysecretsomething',
+      username: process.env.MYSQL_USER,
+      password: process.env.MYSQL_PASSWORD,
       database: process.env.MYSQL_DATABASE || 'ms_auth_test',
       entities: [User, RefreshToken],
       synchronize: true,

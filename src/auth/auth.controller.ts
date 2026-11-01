@@ -1,4 +1,12 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common'
+import {
+  Controller,
+  Post,
+  Body,
+  HttpCode,
+  HttpStatus,
+  Req,
+} from '@nestjs/common'
+import type { Request } from 'express'
 import {
   ApiTags,
   ApiOperation,
@@ -36,11 +44,11 @@ export class AuthController {
   @ApiOperation({
     summary: 'Register a new account',
     description:
-      'Creates a pending (inactive) user account, generates a Health ID, and emits a pending-activation event with an activation token sent to the provided contact method.',
+      'Creates a pending account and queues an activation email through the internal notification service.',
   })
   @ApiCreatedResponse({
     description:
-      'Account created successfully. An activation token has been sent to the provided contact method.',
+      'Account created successfully. An activation email has been queued.',
     type: MessageResponseDto,
   })
   @ApiConflictResponse({
@@ -51,8 +59,11 @@ export class AuthController {
   @ApiInternalServerErrorResponse({
     description: 'Failed to provision the account.',
   })
-  async signup(@Body() registerDto: RegisterUserDto) {
-    return await this.authService.signup(registerDto)
+  async signup(
+    @Body() registerDto: RegisterUserDto,
+    @Req() request?: Request & { id?: string },
+  ) {
+    return await this.authService.signup(registerDto, request?.id)
   }
 
   @Post('login')
@@ -73,8 +84,11 @@ export class AuthController {
   @ApiForbiddenResponse({ description: 'Account has not been activated.' })
   @ApiBadRequestResponse({ description: 'Invalid or malformed request body.' })
   @ApiInternalServerErrorResponse({ description: 'Failed to log the user in.' })
-  async login(@Body() loginUserDto: LoginUserDto) {
-    return await this.authService.login(loginUserDto)
+  async login(
+    @Body() loginUserDto: LoginUserDto,
+    @Req() request?: Request & { id?: string },
+  ) {
+    return await this.authService.login(loginUserDto, request?.id)
   }
 
   @Post('refresh')
@@ -95,8 +109,14 @@ export class AuthController {
   @ApiInternalServerErrorResponse({
     description: 'Failed to refresh authentication tokens.',
   })
-  async refresh(@Body() refreshTokenDto: RefreshTokenDto) {
-    return await this.authService.refresh(refreshTokenDto.refreshToken)
+  async refresh(
+    @Body() refreshTokenDto: RefreshTokenDto,
+    @Req() request?: Request & { id?: string },
+  ) {
+    return await this.authService.refresh(
+      refreshTokenDto.refreshToken,
+      request?.id,
+    )
   }
 
   @Post('logout')
@@ -111,8 +131,14 @@ export class AuthController {
     type: MessageResponseDto,
   })
   @ApiBadRequestResponse({ description: 'Refresh token was not provided.' })
-  async logout(@Body() refreshTokenDto: RefreshTokenDto) {
-    return await this.authService.logout(refreshTokenDto.refreshToken)
+  async logout(
+    @Body() refreshTokenDto: RefreshTokenDto,
+    @Req() request?: Request & { id?: string },
+  ) {
+    return await this.authService.logout(
+      refreshTokenDto.refreshToken,
+      request?.id,
+    )
   }
 
   @Post('google')
@@ -120,7 +146,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Sign in or sign up with Google',
     description:
-      'Verifies a Google ID token. If the account already exists it returns a token pair; otherwise it provisions a new pending account and emits an activation event.',
+      'Verifies a Google ID token. If the account already exists it returns a token pair; otherwise it provisions a new pending account and queues an activation email.',
   })
   @ApiOkResponse({
     description:
@@ -142,8 +168,11 @@ export class AuthController {
   @ApiInternalServerErrorResponse({
     description: 'Failed to verify the Google token.',
   })
-  async googleSignIn(@Body() googleSignInDto: GoogleSignInDto) {
-    return await this.authService.googleSignIn(googleSignInDto)
+  async googleSignIn(
+    @Body() googleSignInDto: GoogleSignInDto,
+    @Req() request?: Request & { id?: string },
+  ) {
+    return await this.authService.googleSignIn(googleSignInDto, request?.id)
   }
 
   @Post('resend-activation')
@@ -154,7 +183,7 @@ export class AuthController {
       'Issues and sends a new activation token for an account that has not yet been activated. A 60-second cooldown is enforced to prevent abuse.',
   })
   @ApiOkResponse({
-    description: 'A new activation code has been sent.',
+    description: 'A new activation email has been queued.',
     type: MessageResponseDto,
   })
   @ApiUnauthorizedResponse({
@@ -166,8 +195,14 @@ export class AuthController {
   @ApiInternalServerErrorResponse({
     description: 'Failed to resend the activation code.',
   })
-  async resendActivation(@Body() resendActivationDto: ResendActivationDto) {
-    return await this.authService.resendActivation(resendActivationDto)
+  async resendActivation(
+    @Body() resendActivationDto: ResendActivationDto,
+    @Req() request?: Request & { id?: string },
+  ) {
+    return await this.authService.resendActivation(
+      resendActivationDto,
+      request?.id,
+    )
   }
 
   @Post('activate')
@@ -188,10 +223,14 @@ export class AuthController {
   @ApiInternalServerErrorResponse({
     description: 'Failed to activate the account.',
   })
-  async activate(@Body() activateUserDto: ActivateUserDto) {
+  async activate(
+    @Body() activateUserDto: ActivateUserDto,
+    @Req() request?: Request & { id?: string },
+  ) {
     return await this.authService.activate(
       activateUserDto.healthId,
       activateUserDto.token,
+      request?.id,
     )
   }
 }

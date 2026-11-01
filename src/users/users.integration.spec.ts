@@ -13,12 +13,17 @@ describe('Users Integration (mysql)', () => {
   let repo: Repository<User>
 
   beforeAll(async () => {
+    if (!process.env.MYSQL_USER || !process.env.MYSQL_PASSWORD) {
+      throw new Error(
+        'MYSQL_USER and MYSQL_PASSWORD must be set to run user integration tests',
+      )
+    }
     const dbConfig = {
       type: 'mysql' as const,
       host: process.env.MYSQL_HOST || '127.0.0.1',
       port: Number(process.env.MYSQL_PORT) || 3306,
-      username: process.env.MYSQL_USER || 'root',
-      password: process.env.MYSQL_PASSWORD || 'verysecretsomething',
+      username: process.env.MYSQL_USER,
+      password: process.env.MYSQL_PASSWORD,
       database: process.env.MYSQL_DATABASE || 'ms_auth_test',
       entities: [User],
       synchronize: true,

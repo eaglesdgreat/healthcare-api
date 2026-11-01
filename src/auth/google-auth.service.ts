@@ -1,30 +1,28 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common'
+import { Injectable, UnauthorizedException } from '@nestjs/common'
 import { OAuth2Client, TokenPayload } from 'google-auth-library'
+import { ConfigService } from '@nestjs/config'
 
 @Injectable()
 export class GoogleAuthService {
-  private readonly client: OAuth2Client
+  private client?: OAuth2Client
 
-  constructor() {
-    const clientId = process.env.GOOGLE_CLIENT_ID
-    this.client = new OAuth2Client(clientId)
-  }
+  constructor(private readonly configService: ConfigService) {}
 
   async verifyIdToken(idToken: string): Promise<TokenPayload> {
+    const clientId = this.configService.getOrThrow<string>('GOOGLE_CLIENT_ID')
+    const client = (this.client ??= new OAuth2Client(clientId))
     try {
-      const ticket = await this.client.verifyIdToken({
+      const ticket = await client.verifyIdToken({
         idToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
+        audience: clientId,
       })
       const payload = ticket.getPayload()
       if (!payload) {
-        throw new InternalServerErrorException(
-          'Google token verification failed',
-        )
+        throw new UnauthorizedException('Invalid Google identity token')
       }
       return payload
     } catch {
-      throw new InternalServerErrorException('Failed to verify Google token')
+      throw new UnauthorizedException('Invalid Google identity token')
     }
   }
 }

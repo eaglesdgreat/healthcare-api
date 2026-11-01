@@ -1,4 +1,4 @@
-import { IsEnum, IsString, IsOptional } from 'class-validator'
+import { IsIn, IsString, IsOptional, MaxLength } from 'class-validator'
 import { UserRole } from '@/users/entities/user.entity'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
@@ -10,17 +10,17 @@ export class GoogleSignInDto {
     type: String,
   })
   @IsString()
+  @MaxLength(8192)
   idToken: string
 
   @ApiPropertyOptional({
     description:
       'Optional role to assign if the Google account does not already exist. Defaults to PATIENT when omitted.',
-    enum: UserRole,
-    enumName: 'UserRole',
+    enum: [UserRole.PATIENT, UserRole.DOCTOR, UserRole.HOSPITAL],
     example: 'PATIENT',
     type: String,
   })
   @IsOptional()
-  @IsEnum(UserRole)
+  @IsIn([UserRole.PATIENT, UserRole.DOCTOR, UserRole.HOSPITAL])
   role?: UserRole
 }

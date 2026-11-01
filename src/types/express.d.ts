@@ -1,9 +1,9 @@
-import { User } from '@/users/entities/user.entity'
+import { AuthTokenPayload } from '@/auth/auth.types'
 
 declare global {
   namespace Express {
     interface Request {
-      user?: User
+      user?: AuthTokenPayload
     }
   }
 }

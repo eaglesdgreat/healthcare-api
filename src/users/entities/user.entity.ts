@@ -52,13 +52,14 @@ export class User {
   @Column({ name: 'last_name', length: 100 })
   lastName: string
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: "User's phone number",
     example: '+2348012345678',
     maxLength: 20,
+    nullable: true,
   })
-  @Column({ name: 'phone_number', length: 20 })
-  phoneNumber: string
+  @Column({ name: 'phone_number', length: 20, nullable: true })
+  phoneNumber: string | null
 
   // Made nullable for the onboarding profile page step
   @ApiPropertyOptional({

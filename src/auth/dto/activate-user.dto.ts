@@ -1,4 +1,4 @@
-import { IsString, Matches } from 'class-validator'
+import { IsString, Matches, MaxLength, MinLength } from 'class-validator'
 import { Transform } from 'class-transformer'
 import { ApiProperty } from '@nestjs/swagger'
 
@@ -20,10 +20,13 @@ export class ActivateUserDto {
   @ApiProperty({
     description:
       'The activation token sent to the registered email/phone during signup or resend-activation.',
-    example: 'a1b2c3d4e5f6a7b8',
+    example: 'a1b2c3d4e5f6a7b8'.repeat(4),
     type: String,
   })
   @IsString()
+  @MinLength(16)
+  @MaxLength(64)
+  @Matches(/^(?:[a-f0-9]{16}|[a-f0-9]{48}|[a-f0-9]{64})$/i)
   @Transform(({ value }: { value: string }) => value?.trim())
   token: string
 }
