@@ -182,6 +182,11 @@ jobs:
             exit 1
           fi
 
+      - name: Run database migrations
+        run: pnpm run migrate:up --env=dev
+        env:
+          NODE_ENV: dev
+
       - name: Run e2e tests
         run: pnpm run test:e2e
 
@@ -251,18 +256,71 @@ jobs:
 
       - name: Run container-based integration smoke test
         run: |
-          container_id=$(docker run --detach --rm --network host \
+          mock_notification_key="$RUNNER_TEMP/mock-notification.key"
+          mock_notification_cert="$RUNNER_TEMP/mock-notification.crt"
+          openssl req -x509 -newkey rsa:2048 -sha256 -days 1 -nodes \
+            -keyout "$mock_notification_key" \
+            -out "$mock_notification_cert" \
+            -subj "/CN=127.0.0.1" \
+            -addext "subjectAltName=IP:127.0.0.1" \
+            -addext "basicConstraints=critical,CA:TRUE"
+          export MOCK_NOTIFICATION_KEY="$mock_notification_key"
+          export MOCK_NOTIFICATION_CERT="$mock_notification_cert"
+          node -e '
+            const fs = require("node:fs");
+            const https = require("node:https");
+            const server = https.createServer({
+              key: fs.readFileSync(process.env.MOCK_NOTIFICATION_KEY),
+              cert: fs.readFileSync(process.env.MOCK_NOTIFICATION_CERT),
+            }, (request, response) => {
+              if (request.method === "GET" && request.url === "/health") {
+                response.writeHead(200).end();
+              } else if (request.method === "POST" && request.url === "/api/notifications/channels") {
+                response.writeHead(201).end();
+              } else if (request.method === "POST" && request.url === "/api/notifications") {
+                response.writeHead(201, { "content-type": "application/json" });
+                response.end(JSON.stringify({ id: "smoke-notification", status: "queued" }));
+              } else {
+                response.writeHead(404).end();
+              }
+            });
+            server.listen(5502, "127.0.0.1");
+          ' &
+          mock_server_pid=$!
+          container_id=""
+          cleanup() {
+            if [ -n "$container_id" ]; then
+              docker rm --force "$container_id" >/dev/null 2>&1 || true
+            fi
+            kill "$mock_server_pid" 2>/dev/null || true
+            rm -f "$mock_notification_key" "$mock_notification_cert"
+          }
+          trap cleanup EXIT
+          for i in $(seq 1 30); do
+            if curl --silent --fail --cacert "$mock_notification_cert" \
+              https://127.0.0.1:5502/health >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl --silent --fail --cacert "$mock_notification_cert" \
+            https://127.0.0.1:5502/health >/dev/null
+          container_id=$(docker run --detach --network host \
+            -v "$mock_notification_cert:/run/mock-notification.crt:ro" \
             -e MYSQL_HOST="$MYSQL_HOST" \
             -e MYSQL_PORT="$MYSQL_PORT" \
             -e MYSQL_USER="$MYSQL_USER" \
             -e MYSQL_PASSWORD="$MYSQL_PASSWORD" \
             -e MYSQL_DATABASE="$MYSQL_DATABASE" \
             -e JWT_SECRET="$JWT_SECRET" \
+            -e NOTIFICATION_SERVICE_URL="https://127.0.0.1:5502" \
+            -e NOTIFICATION_SERVICE_API_KEY="smoke-test-only-not-a-real-api-key-dummy" \
+            -e NOTIFICATION_PAYLOAD_ENCRYPTION_KEY="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" \
+            -e NODE_EXTRA_CA_CERTS=/run/mock-notification.crt \
             -e PORT=5501 \
             local/ms-auth:${{ github.sha }})
-          trap "docker stop $container_id" EXIT
           for i in $(seq 1 30); do
-            if curl -sSf http://127.0.0.1:5501/ >/dev/null 2>&1; then
+            if curl -sSf http://127.0.0.1:5501/health >/dev/null 2>&1; then
               echo "App is responding"
               app_ready=true
               break
@@ -271,15 +329,18 @@ jobs:
           done
           if [ "$app_ready" != "true" ]; then
             echo "Release container never became ready"
+            docker logs "$container_id"
             exit 1
           fi
-          # Smoke: signup creates a 201 and record is persisted
           status=$(curl -s -o /tmp/signup.json -w '%{http_code}' -X POST http://127.0.0.1:5501/signup \
             -H 'Content-Type: application/json' \
             -d '{"firstName":"ci","lastName":"smoke","email":"ci-smoke@example.com","phoneNumber":"+12345678901","role":"PATIENT","password":"Abcd1234!"}')
           echo "Signup status: $status"
-          cat /tmp/signup.json
-          if [ "$status" != "201" ]; then exit 1; fi
+          if [ "$status" != "201" ]; then
+            cat /tmp/signup.json
+            docker logs "$container_id"
+            exit 1
+          fi
           row=$(mysql -h"$MYSQL_HOST" -P"$MYSQL_PORT" -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" -D "$MYSQL_DATABASE" -se \
             "SELECT health_id FROM users WHERE email='ci-smoke@example.com';")
           if [ -z "$row" ]; then echo "No signup record found in DB"; exit 1; fi
