@@ -32,14 +32,20 @@ describe('AuthController', () => {
   it('should call signup on authService', async () => {
     mockAuthService.signup.mockResolvedValue({ message: 'ok' })
     const res = await controller.signup(mockRegisterUserDto)
-    expect(mockAuthService.signup).toHaveBeenCalledWith(mockRegisterUserDto)
+    expect(mockAuthService.signup).toHaveBeenCalledWith(
+      mockRegisterUserDto,
+      undefined,
+    )
     expect(res).toEqual({ message: 'ok' })
   })
 
   it('should call login on authService', async () => {
     mockAuthService.login.mockResolvedValue({ data: {}, meta: {} })
     const res = await controller.login(mockLoginUserDto)
-    expect(mockAuthService.login).toHaveBeenCalledWith(mockLoginUserDto)
+    expect(mockAuthService.login).toHaveBeenCalledWith(
+      mockLoginUserDto,
+      undefined,
+    )
     expect(res).toEqual({ data: {}, meta: {} })
   })
 
@@ -53,6 +59,7 @@ describe('AuthController', () => {
     expect(mockAuthService.activate).toHaveBeenCalledWith(
       body.healthId,
       body.token,
+      undefined,
     )
     expect(res).toEqual({ message: 'activated' })
   })
@@ -64,6 +71,7 @@ describe('AuthController', () => {
     const res = await controller.resendActivation(mockResendActivationDto)
     expect(mockAuthService.resendActivation).toHaveBeenCalledWith(
       mockResendActivationDto,
+      undefined,
     )
     expect(res).toEqual({ message: 'A new activation code has been sent' })
   })

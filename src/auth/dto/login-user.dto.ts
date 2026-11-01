@@ -2,6 +2,7 @@ import {
   IsString,
   MinLength,
   Matches,
+  MaxLength,
   Validate,
   ValidatorConstraint,
   ValidatorConstraintInterface,
@@ -65,6 +66,7 @@ export class LoginUserDto {
     type: String,
   })
   @IsString({ message: 'Password must be a string' })
+  @MaxLength(72)
   @MinLength(8, { message: 'Security requires at least 8 characters' })
   @Matches(/[A-Z]/, {
     message: 'Password must contain at least one uppercase letter',

@@ -44,22 +44,25 @@ export class HttpExceptionFilter implements ExceptionFilter {
             error: 'Internal Server Error',
           }
 
-    const path = httpAdapter.getRequestUrl(request) as string
+    const path = request?.path ?? httpAdapter.getRequestUrl(request)
 
-    // Unexpected (non-HttpException) or 5xx errors are real operational
-    // problems: log at error level with the stack trace so they surface
-    // in alerting. Expected 4xx client errors (validation, auth, not
-    // found, etc.) are logged at warn level without noisy stack traces.
+    // Keep operational logs useful without serializing exception data that
+    // might contain request values or other sensitive information.
     if (httpStatus >= 500) {
       this.logger.error(
-        { err: exception, requestId, path },
+        {
+          requestId,
+          path,
+          statusCode: httpStatus,
+          errorType: exception instanceof Error ? exception.name : 'unknown',
+        },
         'Unhandled exception while processing request',
       )
     } else {
       this.logger.warn(
         { requestId, path, statusCode: httpStatus },
         exception instanceof HttpException
-          ? exception.message
+          ? 'HTTP request rejected'
           : 'Request failed',
       )
     }

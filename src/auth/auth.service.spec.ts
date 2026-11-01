@@ -8,6 +8,8 @@ import { User, UserRole } from '@/users/entities/user.entity'
 import { RefreshToken } from './entities/refresh-token.entity'
 import { GoogleAuthService } from './google-auth.service'
 import { MetricsService } from '@/common/metrics/metrics.service'
+import { NotificationClientService } from './notification-client.service'
+import { Logger } from '@nestjs/common'
 import { createHash } from 'crypto'
 import * as bcrypt from 'bcrypt'
 import {
@@ -29,12 +31,14 @@ type RefreshRepoMock = {
   findOne: jest.Mock
   create: jest.Mock
   save: jest.Mock
+  update: jest.Mock
 }
 
 describe('AuthService', () => {
   let service: AuthService
   let mockUserRepo: UserRepoMock
   let mockRefreshRepo: RefreshRepoMock
+  let activityLogSpy: jest.SpiedFunction<typeof Logger.prototype.log>
 
   const hashValue = (value: string): string =>
     createHash('sha256').update(value).digest('hex')
@@ -46,6 +50,13 @@ describe('AuthService', () => {
 
   const mockEventBus = {
     emit: jest.fn(),
+    emitAsync: jest.fn().mockResolvedValue(undefined),
+  }
+
+  const mockNotificationClient = {
+    sendActivation: jest
+      .fn()
+      .mockResolvedValue({ id: 'notification-id', status: 'queued' }),
   }
 
   const mockGoogleAuthService = {
@@ -68,17 +79,30 @@ describe('AuthService', () => {
     findOne: jest.fn(),
     create: jest.fn(),
     save: jest.fn(),
+    update: jest.fn(),
   })
 
   beforeEach(async () => {
+    activityLogSpy = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined)
     mockUserRepo = mockUserRepository()
     mockRefreshRepo = mockRefreshTokenRepository()
     mockUserRepo.create.mockReturnValue({} as User)
     mockUserRepo.save.mockResolvedValue({} as User)
+    mockUserRepo.update.mockResolvedValue({ affected: 1 })
     mockRefreshRepo.create.mockReturnValue({} as RefreshToken)
     mockRefreshRepo.save.mockResolvedValue({} as RefreshToken)
+    mockRefreshRepo.update.mockResolvedValue({ affected: 1 })
     mockJwtService.sign.mockReturnValue('signed-token')
-    mockJwtService.verifyAsync.mockResolvedValue({ sub: 'uuid' })
+    mockJwtService.verifyAsync.mockResolvedValue({
+      sub: 'uuid',
+      tokenType: 'refresh',
+    })
+    mockNotificationClient.sendActivation.mockResolvedValue({
+      id: 'notification-id',
+      status: 'queued',
+    })
     mockGoogleAuthService.verifyIdToken.mockResolvedValue({
       email: MOCK.googleUser.email,
       email_verified: MOCK.googleUser.emailVerified,
@@ -90,6 +114,10 @@ describe('AuthService', () => {
         MetricsService,
         { provide: UsersService, useValue: mockUsersService },
         { provide: EventBusService, useValue: mockEventBus },
+        {
+          provide: NotificationClientService,
+          useValue: mockNotificationClient,
+        },
         { provide: JwtService, useValue: mockJwtService },
         { provide: GoogleAuthService, useValue: mockGoogleAuthService },
         { provide: getRepositoryToken(User), useValue: mockUserRepo },
@@ -123,13 +151,11 @@ describe('AuthService', () => {
 
     expect(res).toHaveProperty('message')
     expect(mockUserRepo.save).toHaveBeenCalled()
-    expect(mockEventBus.emit).toHaveBeenCalledWith(
-      'user.pending_activation',
+    expect(mockNotificationClient.sendActivation).toHaveBeenCalledWith(
       expect.objectContaining({
+        userId: 'uuid',
         email: MOCK.user.email,
-        phoneNumber: MOCK.user.phoneNumber,
-        healthId: MOCK.healthId.patient,
-        role: UserRole.PATIENT,
+        requestId: undefined,
       }),
     )
   })
@@ -157,8 +183,17 @@ describe('AuthService', () => {
     expect(res).toHaveProperty('data')
     expect(res.meta).toHaveProperty('accessToken')
     expect(res.meta).toHaveProperty('refreshToken')
+    expect(res.data).not.toHaveProperty('password')
     expect(mockRefreshRepo.create).toHaveBeenCalled()
     expect(mockRefreshRepo.save).toHaveBeenCalled()
+    expect(activityLogSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'auth.activity',
+        action: 'login',
+        outcome: 'success',
+      }),
+      'Authentication activity',
+    )
   })
 
   it('should sign in with Google when active user exists', async () => {
@@ -186,6 +221,33 @@ describe('AuthService', () => {
     expect(result.meta).toHaveProperty('refreshToken')
   })
 
+  it('should provision Google users without a phone number as nullable', async () => {
+    mockGoogleAuthService.verifyIdToken.mockResolvedValue({
+      email: 'google.new@example.com',
+      email_verified: true,
+      given_name: 'Google',
+      family_name: 'User',
+    })
+    mockUsersService.findUserByUsername.mockResolvedValue(null)
+    mockUsersService.generateHealthId.mockResolvedValue(MOCK.healthId.patient)
+    mockUserRepo.save.mockResolvedValue({ id: 'uuid' } as User)
+    mockUserRepo.create.mockImplementation(
+      (data: Partial<User>): User => data as User,
+    )
+
+    await service.googleSignIn(mockGoogleSignInDto)
+
+    expect(mockUserRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ phoneNumber: null }),
+    )
+    expect(mockNotificationClient.sendActivation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'uuid',
+        email: 'google.new@example.com',
+      }),
+    )
+  })
+
   it('should refresh a valid refresh token', async () => {
     const user = {
       id: 'uuid',
@@ -197,19 +259,76 @@ describe('AuthService', () => {
     }
     const refreshToken = MOCK.refreshToken
     mockRefreshRepo.findOne.mockResolvedValue({
+      id: 'token-id',
       userId: 'uuid',
       token: hashValue(refreshToken),
       revoked: false,
       expiresAt: new Date(Date.now() + 1000 * 60 * 10),
     })
     mockUserRepo.findOne.mockResolvedValue(user)
-    mockJwtService.verifyAsync.mockResolvedValue({ sub: 'uuid' })
+    mockJwtService.verifyAsync.mockResolvedValue({
+      sub: 'uuid',
+      tokenType: 'refresh',
+    })
 
     const result = await service.refresh(refreshToken)
 
     expect(result).toHaveProperty('accessToken')
     expect(result).toHaveProperty('refreshToken')
     expect(mockRefreshRepo.save).toHaveBeenCalled()
+    expect(mockRefreshRepo.update).toHaveBeenCalledWith(
+      { id: 'token-id', revoked: false },
+      { revoked: true },
+    )
+  })
+
+  it('should reject an access token presented for refresh', async () => {
+    mockJwtService.verifyAsync.mockResolvedValue({
+      sub: 'uuid',
+      tokenType: 'access',
+    })
+
+    await expect(service.refresh(MOCK.refreshToken)).rejects.toThrow(
+      'Invalid or expired refresh token',
+    )
+    expect(mockRefreshRepo.findOne).not.toHaveBeenCalled()
+    expect(mockRefreshRepo.update).not.toHaveBeenCalled()
+  })
+
+  it('should rotate a legacy refresh token only when it is persisted', async () => {
+    mockJwtService.verifyAsync.mockResolvedValue({ sub: 'uuid' })
+    mockRefreshRepo.findOne.mockResolvedValue({
+      id: 'legacy-token-id',
+      userId: 'uuid',
+      token: hashValue(MOCK.refreshToken),
+      revoked: false,
+      expiresAt: new Date(Date.now() + 1000 * 60 * 10),
+    })
+    mockUserRepo.findOne.mockResolvedValue({
+      id: 'uuid',
+      isActive: true,
+      role: UserRole.PATIENT,
+      healthId: MOCK.healthId.patient,
+    })
+
+    await expect(service.refresh(MOCK.refreshToken)).resolves.toHaveProperty(
+      'accessToken',
+    )
+    expect(mockRefreshRepo.update).toHaveBeenCalledWith(
+      { id: 'legacy-token-id', revoked: false },
+      { revoked: true },
+    )
+  })
+
+  it('should return unauthorized for an unverifiable refresh token', async () => {
+    mockJwtService.verifyAsync.mockRejectedValue(
+      new Error('Signature verification failed'),
+    )
+
+    await expect(service.refresh(MOCK.refreshToken)).rejects.toThrow(
+      'Invalid or expired refresh token',
+    )
+    expect(mockRefreshRepo.findOne).not.toHaveBeenCalled()
   })
 
   it('should reject login when the user is inactive', async () => {
@@ -294,15 +413,12 @@ describe('AuthService', () => {
     expect(updateArg.activationExpiresAt).toBeInstanceOf(Date)
     expect(updateArg.lastActivationSentAt).toBeInstanceOf(Date)
 
-    expect(mockEventBus.emit).toHaveBeenCalledTimes(1)
-    const emitArg = mockEventBus.emit.mock.calls[0] as [
-      string,
-      { email: string; activationToken: string; resend: boolean },
-    ]
-    expect(emitArg[0]).toBe('user.pending_activation')
-    expect(emitArg[1].email).toBe(MOCK.user.email)
-    expect(typeof emitArg[1].activationToken).toBe('string')
-    expect(emitArg[1].resend).toBe(true)
+    expect(mockNotificationClient.sendActivation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'uuid',
+        email: MOCK.user.email,
+      }),
+    )
   })
 
   it('should not reveal whether an account exists when resending', async () => {
@@ -312,7 +428,7 @@ describe('AuthService', () => {
       service.resendActivation(mockResendActivationDto),
     ).rejects.toThrow('Unable to resend activation code at this time')
     expect(mockUserRepo.update).not.toHaveBeenCalled()
-    expect(mockEventBus.emit).not.toHaveBeenCalled()
+    expect(mockNotificationClient.sendActivation).not.toHaveBeenCalled()
   })
 
   it('should return message when account is already activated on resend', async () => {
@@ -329,7 +445,7 @@ describe('AuthService', () => {
     const res = await service.resendActivation(mockResendActivationDto)
 
     expect(res.message).toBe('Account is already activated')
-    expect(mockEventBus.emit).not.toHaveBeenCalled()
+    expect(mockEventBus.emitAsync).not.toHaveBeenCalled()
     expect(mockUserRepo.update).not.toHaveBeenCalled()
   })
 
@@ -348,6 +464,6 @@ describe('AuthService', () => {
       service.resendActivation(mockResendActivationDto),
     ).rejects.toThrow(/Please wait/)
     expect(mockUserRepo.update).not.toHaveBeenCalled()
-    expect(mockEventBus.emit).not.toHaveBeenCalled()
+    expect(mockEventBus.emitAsync).not.toHaveBeenCalled()
   })
 })

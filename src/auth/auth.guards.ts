@@ -7,9 +7,9 @@ import {
 import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
 import { Request } from 'express'
-import { User } from '@/users/entities/user.entity'
 import { IS_PUBLIC_KEY } from './auth.decorator'
 import { Reflector } from '@nestjs/core'
+import { AuthTokenPayload } from './auth.types'
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -34,9 +34,15 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException()
     }
     try {
-      const payload: User = await this.jwtService.verifyAsync(token, {
-        secret: this.configService.get<string>('JWT_SECRET'),
-      })
+      const payload = await this.jwtService.verifyAsync<AuthTokenPayload>(
+        token,
+        {
+          secret: this.configService.get<string>('JWT_SECRET'),
+        },
+      )
+      if (payload.tokenType !== 'access') {
+        throw new UnauthorizedException()
+      }
       request.user = payload
     } catch {
       throw new UnauthorizedException()

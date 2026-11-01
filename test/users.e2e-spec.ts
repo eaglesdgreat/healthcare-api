@@ -15,12 +15,17 @@ describe('Users E2E (mysql)', () => {
   let accessToken: string
 
   beforeAll(async () => {
+    if (!process.env.MYSQL_USER || !process.env.MYSQL_PASSWORD) {
+      throw new Error(
+        'MYSQL_USER and MYSQL_PASSWORD must be set to run users E2E tests',
+      )
+    }
     const dbConfig = {
       type: 'mysql' as const,
       host: process.env.MYSQL_HOST || '127.0.0.1',
       port: Number(process.env.MYSQL_PORT) || 3306,
-      username: process.env.MYSQL_USER || 'root',
-      password: process.env.MYSQL_PASSWORD || 'verysecretsomething',
+      username: process.env.MYSQL_USER,
+      password: process.env.MYSQL_PASSWORD,
       database: process.env.MYSQL_DATABASE || 'ms_auth_test',
       entities: [User, RefreshToken],
       synchronize: true,
@@ -41,6 +46,7 @@ describe('Users E2E (mysql)', () => {
       email: 'users.e2e@example.com',
       healthId: 'PAT-E2E0001',
       roles: 'PATIENT',
+      tokenType: 'access',
     })
   })
 

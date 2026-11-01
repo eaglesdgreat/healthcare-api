@@ -13,6 +13,7 @@ import { EventBusModule } from '@/common/event-bus.module'
 import { RefreshToken } from './entities/refresh-token.entity'
 import { GoogleAuthService } from './google-auth.service'
 import { MetricsModule } from '@/common/metrics/metrics.module'
+import { NotificationClientService } from './notification-client.service'
 
 @Module({
   providers: [
@@ -22,6 +23,7 @@ import { MetricsModule } from '@/common/metrics/metrics.module'
     },
     AuthService,
     GoogleAuthService,
+    NotificationClientService,
   ],
   imports: [
     ConfigModule,
@@ -31,10 +33,16 @@ import { MetricsModule } from '@/common/metrics/metrics.module'
     JwtModule.registerAsync({
       global: true,
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: '24h' },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const secret = configService.getOrThrow<string>('JWT_SECRET')
+        if (Buffer.byteLength(secret, 'utf8') < 32) {
+          throw new Error('JWT_SECRET must be at least 32 bytes')
+        }
+        return {
+          secret,
+          signOptions: { expiresIn: '24h' },
+        }
+      },
     }),
     UsersModule,
   ],

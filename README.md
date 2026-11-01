@@ -129,13 +129,13 @@ Sign-Up
 - Validation: Incoming registration requests are validated with class-validator (see RegisterUserDto).
 - ID Generation: A prefixed Health ID (PAT-, DOC-, HOS-) is generated based on the chosen role.
 - Security: Passwords are hashed using bcrypt before being persisted.
-- Activation: Newly registered users are created as inactive (isActive = false). An activationToken (random hex string) and activationExpiresAt (24 hours) are generated and saved on the user record. The service returns a success message and emits a placeholder event so an external notification service (email/SMS) can deliver the token.
+- Activation: Newly registered users are created as inactive (isActive = false). Auth registers the email address with the notification service and enqueues an activation email. The token is SHA-256 hashed in auth storage and AES-256-GCM encrypted in the notification payload.
 
 Endpoints (Auth service)
 
 - POST /signup
   - Body: RegisterUserDto
-  - Behaviour: creates an inactive user, generates activationToken and activationExpiresAt, returns a message indicating activation is required. The activation token should be delivered to the user via an external notification (email/SMS).
+  - Behaviour: creates an inactive user and queues an encrypted activation email through the internal notification API. A `202` means queued, not delivered.
 
 - POST /activate
   - Body: { healthId: string, token: string }
@@ -151,7 +151,7 @@ Endpoints (Auth service)
 
 - POST /google
   - Body: GoogleSignInDto (idToken + optional role)
-  - Behaviour: verifies a Google ID token, signs in an existing active account or provisions a new inactive account and emits an activation event.
+  - Behaviour: verifies a Google ID token, signs in an existing active account or provisions a new inactive account and queues an activation email.
 
 #### Sign-In
 
@@ -165,35 +165,43 @@ These normalization rules ensure consistent lookups across registrations and log
 
 Authentication tokens
 
-- JWT payload contains: sub (user UUID), healthId, role, email, phoneNumber.
+- JWT payload contains: sub (user UUID), healthId, roles, and a tokenType discriminator. Contact details are not copied into JWT claims.
 - Access token: expires in 15 minutes (used to access protected APIs).
 - Refresh token: expires in 7 days and is persisted so the service can revoke or rotate refresh tokens.
 
-Notes on Activation token
+Activation token delivery
 
 - Activation tokens are generated with crypto.randomBytes, hashed before storage, and stored with a 24-hour expiry.
-- The service includes a placeholder to emit a 'user.pending_activation' event when a user signs up. Integrate this with an email/SMS delivery service or an event bus for production use.
+- Signup, Google provisioning, and resend register the user's email channel at `POST /api/notifications/channels` and enqueue `auth-account-activation` at `POST /api/notifications`.
+- Requests use the shared service API key, an `Idempotency-Key`, and the incoming `x-request-id`. The token is encrypted using AES-256-GCM before it is sent to or persisted by the notification service.
 
 ### 3. Cross-Service Communication
 
-The Auth Service is the Identity Provider (IdP) for other microservices. Communication follows these patterns:
+The Auth Service is the Identity Provider (IdP) for other microservices. Activation delivery uses synchronous internal REST to enqueue work; email delivery is asynchronous in the notification worker.
 
 #### A. Synchronous (Internal API Gateway / Traefik)
 
 - When a request hits downstream services, the service extracts and verifies the JWT signature (shared secret or public key).
 - Downstream services should use the healthId and role from the token to apply authorization rules and filter data.
 
-#### B. Asynchronous (Event-Driven)
+#### B. Notifications and observability
 
-- On user creation the Auth Service emits events (placeholder name: user.registered / user.pending_activation). Consumers such as the Patient Service can react to create EHR records or send notifications.
-- An optional external event bus can be enabled by setting `EVENT_BUS_URL`; events will be posted to that broker URL in addition to the in-process emitter.
+- Configure `NOTIFICATION_SERVICE_URL`, `NOTIFICATION_SERVICE_API_KEY` (at least 32 bytes), and `NOTIFICATION_PAYLOAD_ENCRYPTION_KEY` (base64-encoded 32-byte AES key) in auth. The notification service uses the same key values as `NOTIFICATION_API_KEY` and `NOTIFICATION_PAYLOAD_ENCRYPTION_KEY`.
+- Production notification URLs must use HTTPS and should be reachable only on the private service network. Store all keys in a secrets manager; never hardcode credentials.
+- Auth emits structured `auth.activity` JSON logs to stdout. Alloy collects container stdout and forwards logs to Loki; the observability service has no direct auth event-ingest API.
+- Notification enqueue failures return an error and are logged without token, email, or API-key values. A successful `202` is queue acceptance only; query notification status or monitor delivery logs for completion.
 
 ### 4. Security & Data Integrity
 
 - Input Protection: Health IDs and credentials are validated with strict regexes to prevent injection and malformed IDs.
-- Rate Limiting: Traefik-level rate limiting is recommended to protect login and activation endpoints from brute-force attacks. Consider adding server-side rate limiting (NestJS Throttler) for defense in depth.
-- Audit Trail: Authentication attempts (successful and failed) should be logged. The container logs are a basic audit trail; for production use push audit logs to a centralized logging system.
-- Token Revocation: The service currently issues stateless JWTs. For immediate revocation support consider storing refresh tokens or maintaining a revocation list.
+- Database access uses TypeORM repository methods with bound parameters; never interpolate request values into SQL. User-controlled profile fields are returned as data and must be escaped by clients; do not render them as raw HTML.
+- Self-service signup and Google provisioning cannot assign the ADMIN role.
+- Google identity tokens do not reliably include a phone number; the users schema now permits a null phone number for these accounts. Apply the new phone-number-nullability migration before deploying this version.
+- Activation tokens are 256-bit random values stored only as SHA-256 hashes, compared in constant time, and rejected when expiry is missing or elapsed. Refresh tokens are hashed at rest and atomically revoked during rotation; access tokens cannot be used as refresh tokens.
+- Request bodies and query-bearing request URLs are excluded from HTTP logs. Auth audit logs/events never include passwords, bearer tokens, refresh tokens, Google ID tokens, or activation tokens.
+- Rate Limiting: Configure Traefik-level rate limits for login and activation endpoints to mitigate brute-force attacks. Keep limits enabled in production.
+- Audit Trail: Successful and failed authentication actions emit safe `auth.activity` structured logs, collected by Alloy and stored in Loki. Logs include the request ID for correlation and exclude secrets and contact data.
+- Token Revocation: Refresh tokens are persisted as hashes and atomically revoked during rotation or logout. Access tokens remain short-lived JWTs.
 
 ### 5. Development Workflow (Docker)
 
@@ -201,7 +209,7 @@ This project uses Docker Compose for a "Hot-Reload" environment. Key points:
 
 - Dev build: docker-compose targets the `base` stage so the service runs with a bind mount and watch mode for fast feedback.
 - Startup sequence: docker-compose runs a wait-for script to ensure the database is reachable, runs migrations (db-migrate up -e dev) and starts NestJS in watch mode.
-- Environment: Provide environment variables via a .env file (example keys required: MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE, JWT_SECRET).
+- Environment: Provide environment variables via a local `.env` file (MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE, JWT_SECRET, GOOGLE_CLIENT_ID, NOTIFICATION_SERVICE_URL, NOTIFICATION_SERVICE_API_KEY, NOTIFICATION_PAYLOAD_ENCRYPTION_KEY). Never commit `.env`; production credentials must come from a secrets manager.
 - Commands:
   - Local dev: pnpm install; make start (uses docker-compose up -d)
   - Build release: make build-release (uses the Makefile to build the `release` Docker image)
@@ -210,19 +218,20 @@ This project uses Docker Compose for a "Hot-Reload" environment. Key points:
 Testing & Building
 
 - Use pnpm run build to compile TypeScript into dist/ (required by the production Docker image).
-- Run tests with pnpm run test (unit) and pnpm run test:e2e for E2E tests.
+- Run tests with pnpm run test:unit (unit) and pnpm run test:e2e for E2E tests. Integration and E2E tests require MYSQL_USER and MYSQL_PASSWORD to be supplied through the environment.
 
 Deployment notes
 
 - Keep TypeORM synchronize = false in production (migrations are used).
 - Secure JWT_SECRET and database credentials using a secrets manager in production.
-- Consider adding centralized logging and monitoring for auditability and alerting.
+- Production requires `JWT_SECRET` and `NOTIFICATION_SERVICE_API_KEY` to contain at least 32 bytes, `NOTIFICATION_PAYLOAD_ENCRYPTION_KEY` to decode to exactly 32 bytes, and an HTTPS `NOTIFICATION_SERVICE_URL`. Google sign-in requires `GOOGLE_CLIENT_ID`.
+- Centralized structured logs are collected from Docker stdout by Alloy and stored in Loki. Restrict log access and retention according to the platform's data-protection policy.
 
 If you update the code that affects the behavior documented above (for example token lifetimes, endpoint names, or payload contents), update this README accordingly so future maintainers have a single source of truth.
 
 ### 6. Observability and diagnostics
 
-This service emits structured Pino logs and Prometheus metrics so it can be operated consistently with the other healthcare microservices. Logs include a request correlation ID (`x-request-id`), which is returned to callers and should be supplied when reporting an issue. Authentication headers, cookies, passwords, and tokens are redacted before a log is emitted.
+This service emits structured Pino logs and Prometheus metrics so it can be operated consistently with the other healthcare microservices. Logs include a request correlation ID (`x-request-id`), which is returned to callers and should be supplied when reporting an issue. Request bodies, query-bearing URLs, authentication headers, cookies, and API keys are redacted before a log is emitted. Auth activity is written to stdout without credentials, tokens, contact details, or profile data. Alloy collects container logs and forwards them to Loki. Raw exception objects are not logged by the auth flow.
 
 | Endpoint       | Authentication                                      | Purpose                                                                                                                                                                  |
 | -------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

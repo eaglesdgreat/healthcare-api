@@ -10,7 +10,7 @@
 
 - **Polymorphic Routing Keys:** Support instant user categorization using structural, immutable prefixes (PAT-, DOC-, HOS-).
 
-- **Asynchronous side-effects:** Long-running processes like sending emails, SMS verifications, or push notifications must be decoupled from the core HTTP thread via event-driven messaging.
+- **Asynchronous side-effects:** Auth calls the notification service's internal REST API to enqueue delivery; the notification service performs provider delivery asynchronously.
 
 - **Offline Resilience:** The authentication architecture must natively support token validation boundaries that allow client-side service workers to safely queue actions while offline.
 
@@ -18,7 +18,7 @@
 
 #### 3.1 Structural System Overview
 
-All external client traffic passes through an API Gateway (Traefik). Core lifecycle actions trigger events published to a central Message Broker, which routes notification requests to an independent Notification Microservice.
+All external client traffic passes through an API Gateway (Traefik). Auth uses the notification service's authenticated REST API for activation messages. Auth activity logs go to stdout and are collected by the observability stack.
 
 ```text
 [ Client App / Service Worker ]
@@ -29,23 +29,26 @@ All external client traffic passes through an API Gateway (Traefik). Core lifecy
               ▼
      [ ms-auth-api (NestJS) ] ───► [ ms-auth-db (MySQL) ]
               │
-              ▼ (Publishes Events)
-     [ Message Broker (RabbitMQ/Kafka) ]
+              ├── REST + API key + encrypted payload
+              ▼
+     [ Notification API ] ───► [ BullMQ / Redis ] ───► [ SendGrid ]
               │
-              ▼ (Consumes Events)
-     [ ms-notification-service ] ───► Third-Party Gateways (Twilio, SendGrid, FCM)
+              └── safe structured stdout logs
+                         │ Docker stdout
+                         ▼
+              [ Alloy ] ───► [ Loki ]
 ```
 
 #### 3.2 Revised Data Models & Schema Evolution
 
-The database (ms-auth-db) uses a unified users table. Accounts are created in a deactivated state (is_active = false) by default, requiring token verification.
+The database (ms-auth-db) uses a unified users table. Accounts are created in a deactivated state (is_active = false) by default, requiring token verification. Phone numbers are nullable so Google accounts without a phone claim can be provisioned without inventing a placeholder value.
 
 ```sql
 CREATE TABLE users (
     id VARCHAR(36) PRIMARY KEY,                   -- UUID v4
     health_id VARCHAR(20) UNIQUE,                 -- PAT-, DOC-, HOS- prefixed identifier
     email VARCHAR(255) UNIQUE,
-    phone_number VARCHAR(20) UNIQUE,
+    phone_number VARCHAR(20) NULL UNIQUE,
     password_hash VARCHAR(255) NULL,              -- Nullable for Google OAuth users
     role ENUM('PATIENT', 'DOCTOR', 'HOSPITAL', 'ADMIN') NOT NULL,
     is_active BOOLEAN DEFAULT FALSE,              -- High security default
@@ -72,14 +75,17 @@ When a user signs up using credentials or Google OAuth2, they are placed in a ho
  [ Create Inactive User ] ──► [ Generate Activation Token ]
           │
           ▼
- [ Emit: user.pending_activation ] ──► (Picked up by Notification Service)
-                                                 │
-                                                 ▼
-                                     (Sends Email/SMS to User)
+ [ Register email channel + enqueue activation ]
+                     │
+                     ▼
+          [ Notification API returns 202 ]
+                     │
+                     ▼
+          [ Worker sends plain-text email ]
                                                  │
           ┌──────────────────────────────────────┘
           ▼
-[ Client hits /auth/activate?token=... ]
+[ Client POST /auth/activate { healthId, token } ]
           │
           ▼
  [ Validate Token & Expiry ] ──► [ Flip is_active = true ]
@@ -93,11 +99,13 @@ When a user signs up using credentials or Google OAuth2, they are placed in a ho
 
 1. **User Creation:** Record saved with is_active: false and an activation_token expiring in 24 hours.
 
-2. **Event Dispatched:** ms-auth-api publishes a user.pending_activation event containing user metadata and the token.
+2. **Notification Enqueued:** ms-auth-api registers the user's email channel and sends an idempotent request to the notification API. The activation token is SHA-256 hashed in the auth database and AES-256-GCM encrypted in transit and at rest in the notification database. It is never written to logs.
 
-3. **Notification Consumption:** The ms-notification-service consumes the event and dispatches an Email (via SendGrid), an SMS (via Twilio), or a Push Notification (via Firebase Cloud Messaging) based on the user's preferred contact method.
+3. **Notification Delivery:** The notification API returns `202 Accepted` when queued. Its worker decrypts the payload only to render the `auth-account-activation` plain-text email and sends it through SendGrid. Queue acceptance is not delivery confirmation.
 
 4. **Activation:** The user submits the token to POST /auth/activate. Upon validation, is_active is updated to true, the token is cleared, and an integration event user.registered is published to notify downstream domain services (Patient, Doctor, Hospital) to safely provision empty profiles mapped to that health_id.
+
+Signup, Google onboarding, and resend await channel registration and notification enqueue. Configure `NOTIFICATION_SERVICE_URL`, `NOTIFICATION_SERVICE_API_KEY`, and `NOTIFICATION_PAYLOAD_ENCRYPTION_KEY` in auth. The notification API must use the matching service key and encryption key. In production, use HTTPS and a private service network. Activation lifecycle events remain process-local; they are not sent to the notification or observability services.
 
 #### 4.1.2 Resend Activation Code
 
@@ -119,17 +127,17 @@ If a user's activation token expires before they activate their account, the cli
                                   record last_activation_sent_at
                                    |
                                    v
-                     [ Emit: user.pending_activation (resend: true) ]
+                     [ Register channel + enqueue encrypted notice ]
                                    |
                                    v
                      (Notification Service delivers new code)
 ```
 
-1. **Identifier Lookup:** The user is located by email or phone number; unknown accounts return a generic message so the endpoint cannot be used to enumerate registered users.
+1. **Identifier Lookup:** The user is located by email or phone number; unknown accounts return a generic message so the endpoint cannot be used to enumerate registered users. Activation delivery currently requires a stored email address.
 
 2. **Cooldown Guard:** The `last_activation_sent_at` column enforces a resend interval (default 60s) to prevent spamming the user's contact channel.
 
-3. **Token Regeneration:** A new token is generated, SHA-256 hashed (matching signup), and stored alongside a refreshed `activation_expires_at` of +24h. The `user.pending_activation` event is re-emitted with `resend: true`, so the Notification Service delivers it through the user's preferred contact method without any service changes.
+3. **Token Regeneration:** A new token is generated, SHA-256 hashed (matching signup), and stored alongside a refreshed `activation_expires_at` of +24h. Auth registers the email channel and queues a new notification using a token-derived idempotency key.
 
 #### 4.2 Unified Authentication (Sign-In Engine)
 
@@ -157,7 +165,7 @@ if (!user.is_active) throw new ForbiddenException('Account requires activation')
 
 3. If the email exists and matches an activated account, a native system JWT is issued and refresh tokens are persisted for rotation.
 
-4. If the email is unknown, the application provisions a new inactive user, generates an activation token, emits `user.pending_activation`, and requires activation before first use.
+4. If the email is unknown, the application provisions a new inactive user, queues an encrypted activation email, and requires activation before first use.
 
 #### 4.4 Refresh Token Rotation & Revocation
 
@@ -190,20 +198,18 @@ Gateway Ingress Defenses: Traefik forces TLS 1.3 protocol requirements and acts 
 
 Input Sanitization Constraints: Strict structural transformations via class-transformer format identifiers to unified cases (e.g., mapping incoming string variants to standard uppercase values like PAT-12345678) to protect internal lookup algorithms.
 
-This completed design block can be written directly to your project root as DESIGN_AUTH.md. It perfectly outlines your decoupled service structures.
-
-Now that this is fully documented, shall we proceed with the Technical Design Document for the Medical Appointment Microservice Architecture?
-
 6. ## Observability, Monitoring, and Error Diagnostics
 
 The Auth Service produces service-local observability signals that are collected by the shared platform observability stack. This keeps domain context close to the code while enabling cross-service dashboards, alerting, and incident investigation.
 
-#### 6.1 Structured Logging
+#### 6.1 Structured Logging and Audit Events
 
 - The application uses Pino through `nestjs-pino`. Production logs are JSON; local development logs are pretty-printed.
 - Every incoming request is assigned an `x-request-id` or reuses the caller-supplied value. The same value is included in the response and structured logs, allowing support staff to correlate an API error with its server-side log entries.
-- Sensitive values are redacted before logging: authorization headers, cookies, passwords, refresh tokens, Google ID tokens, and generic token fields.
-- Successful authentication and lifecycle operations log Health IDs and outcomes, never credentials or activation tokens. Unexpected faults include the original error for operational investigation.
+- Sensitive request data is excluded or redacted before logging, including request bodies, authorization headers, cookies, API keys, and request URLs with query strings. Auth error logs contain only an error type, status, and safe route context; raw exception objects are not logged.
+- Authentication outcomes are emitted as structured `auth.activity` Pino logs with action, outcome, internal user ID where available, timestamp, and request ID. Logs never include passwords, access/refresh tokens, Google ID tokens, activation tokens, or contact details.
+- The observability repository has no event-ingest API. Alloy collects container stdout and forwards JSON logs to Loki; do not make a direct observability HTTP request from auth.
+- Activation notices use the notification REST API. Configure a 32-byte-or-longer `NOTIFICATION_SERVICE_API_KEY`, `NOTIFICATION_SERVICE_URL` (HTTPS in production), and base64-encoded 32-byte `NOTIFICATION_PAYLOAD_ENCRYPTION_KEY`. The notification service must use the matching `NOTIFICATION_API_KEY` and encryption key.
 
 #### 6.2 Metrics and Readiness
 
@@ -228,4 +234,13 @@ All HTTP exceptions are formatted by the global exception filter. The response c
 }
 ```
 
-Expected client errors (4xx) are logged at warning level without a stack trace. Unexpected errors and all 5xx failures are logged at error level with their stack trace and request context. Clients must treat `response` as the underlying Nest error payload and `requestId` as the support correlation key.
+Expected client errors (4xx) are logged at warning level without a stack trace. Unexpected errors and all 5xx failures are logged at error level with a safe error type and request context, but no raw exception message or stack that could contain user data or secrets. Clients must treat `response` as the underlying Nest error payload and `requestId` as the support correlation key.
+
+#### 6.4 Security Requirements
+
+- Signup and Google onboarding may assign PATIENT, DOCTOR, or HOSPITAL roles only. ADMIN is never self-assignable.
+- Google onboarding does not assume a phone number is present in the ID token. The matching schema migration makes `phone_number` nullable; deploy that migration before the new application version.
+- New refresh JWTs carry a `tokenType: "refresh"` claim; access JWTs carry `tokenType: "access"`. Legacy refresh tokens remain usable only when their hash is present in the refresh-token store. The refresh endpoint rejects access tokens and performs an atomic conditional revocation before issuing a replacement. Refresh tokens are hashed at rest.
+- Activation tokens contain 256 bits of random entropy, are hashed at rest, must have a non-null unexpired expiry, and are compared using a constant-time comparison.
+- TypeORM repository APIs are used for database access; do not build SQL by interpolating user-controlled values. Clients must render returned names and other user-controlled text as escaped text, never raw HTML.
+- No new runtime package was introduced for this refactor. Keep credentials in environment variables or a secrets manager; production requires a `JWT_SECRET` of at least 32 bytes and the notification integration settings described above.

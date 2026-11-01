@@ -9,6 +9,7 @@ import { RefreshToken } from './entities/refresh-token.entity'
 import { EventBusService, EventPayload } from '@/common/event-bus.service'
 import { Repository } from 'typeorm'
 import { getRepositoryToken } from '@nestjs/typeorm'
+import { NotificationClientService } from './notification-client.service'
 import {
   MOCK,
   mockRegisterUserDto,
@@ -21,6 +22,14 @@ describe('Auth Integration (mysql)', () => {
   let authService: AuthService
   let usersRepo: Repository<User>
   let eventBus: EventBusService
+  const mockNotificationClient = {
+    sendActivation: jest.fn((payload: { activationToken: string }) => {
+      eventBus?.emit('user.pending_activation', {
+        activationToken: payload.activationToken,
+      })
+      return { id: 'notification-id', status: 'queued' }
+    }),
+  }
   const readActivationToken = (payload?: EventPayload): string => {
     const token = payload?.activationToken
     if (typeof token !== 'string') {
@@ -31,26 +40,34 @@ describe('Auth Integration (mysql)', () => {
 
   beforeAll(async () => {
     // Integration tests run against the project's MySQL instance.
+    if (!process.env.MYSQL_USER || !process.env.MYSQL_PASSWORD) {
+      throw new Error(
+        'MYSQL_USER and MYSQL_PASSWORD must be set to run auth integration tests',
+      )
+    }
     const dbConfig = {
       type: 'mysql' as const,
       host: process.env.MYSQL_HOST || '127.0.0.1',
       port: Number(process.env.MYSQL_PORT) || 3306,
-      username: process.env.MYSQL_USER || 'root',
-      password: process.env.MYSQL_PASSWORD || 'verysecretsomething',
+      username: process.env.MYSQL_USER,
+      password: process.env.MYSQL_PASSWORD,
       database: process.env.MYSQL_DATABASE || 'ms_auth_test',
       entities: [User, RefreshToken],
       synchronize: true,
       dropSchema: true,
     }
 
-    module = await Test.createTestingModule({
+    const builder = Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({ isGlobal: true }),
         TypeOrmModule.forRoot(dbConfig),
         UsersModule,
         AuthModule,
       ],
-    }).compile()
+    })
+      .overrideProvider(NotificationClientService)
+      .useValue(mockNotificationClient)
+    module = await builder.compile()
 
     authService = module.get<AuthService>(AuthService)
     usersRepo = module.get<Repository<User>>(getRepositoryToken(User))

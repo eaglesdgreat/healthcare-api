@@ -15,7 +15,9 @@ async function bootstrap() {
   // Global Validation Config
   app.useGlobalPipes(
     new ValidationPipe({
+      transform: true,
       whitelist: true,
+      forbidNonWhitelisted: true,
     }),
   )
 
@@ -58,7 +60,9 @@ async function bootstrap() {
   logger.log(`Application is running on port ${port}`, 'Bootstrap')
 }
 bootstrap().catch((error: unknown) => {
-  // available yet if bootstrap itself failed to initialize.
-  console.error('Error starting application:', error)
+  console.error(
+    'Application bootstrap failed:',
+    error instanceof Error ? error.name : 'unknown',
+  )
   process.exit(1)
 })

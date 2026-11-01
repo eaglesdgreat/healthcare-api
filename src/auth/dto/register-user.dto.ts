@@ -1,10 +1,11 @@
 // src/auth/dto/register-user.dto.ts
 import {
   IsEmail,
-  IsEnum,
+  IsIn,
   IsNotEmpty,
   IsString,
   Matches,
+  MaxLength,
   MinLength,
 } from 'class-validator'
 import { Transform } from 'class-transformer'
@@ -21,6 +22,7 @@ export class RegisterUserDto {
   })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(100)
   @Transform(({ value }: { value: string }) => value?.trim())
   firstName: string
 
@@ -33,6 +35,7 @@ export class RegisterUserDto {
   })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(100)
   @Transform(({ value }: { value: string }) => value?.trim())
   lastName: string
 
@@ -43,6 +46,7 @@ export class RegisterUserDto {
     type: String,
   })
   @IsEmail({}, { message: 'Please provide a valid email address' })
+  @MaxLength(255)
   @Transform(({ value }: { value: string }) => value?.toLowerCase()?.trim())
   email: string
 
@@ -57,6 +61,7 @@ export class RegisterUserDto {
   })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(16)
   @Matches(/^\+?[0-9]{10,15}$/, {
     message: 'Please provide a valid phone number',
   })
@@ -65,12 +70,13 @@ export class RegisterUserDto {
 
   @ApiProperty({
     description: 'The role to be assigned to the new account',
-    enum: UserRole,
-    enumName: 'UserRole',
+    enum: [UserRole.PATIENT, UserRole.DOCTOR, UserRole.HOSPITAL],
     example: 'PATIENT',
     type: String,
   })
-  @IsEnum(UserRole, { message: 'Role must be PATIENT, DOCTOR, or HOSPITAL' })
+  @IsIn([UserRole.PATIENT, UserRole.DOCTOR, UserRole.HOSPITAL], {
+    message: 'Role must be PATIENT, DOCTOR, or HOSPITAL',
+  })
   role: UserRole
 
   @ApiProperty({
@@ -83,6 +89,7 @@ export class RegisterUserDto {
     type: String,
   })
   @IsString()
+  @MaxLength(72)
   @MinLength(8, { message: 'Security requires at least 8 characters' })
   @Matches(/[A-Z]/, {
     message: 'Password must contain at least one uppercase letter',
