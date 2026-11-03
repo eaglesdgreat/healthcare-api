@@ -46,7 +46,7 @@ $ pnpm run start:prod
 
 ## Run tests
 
-Integration and end-to-end tests use MySQL. Make sure your local database is running before you run the integration or e2e commands. E2E tests use the application migrations rather than TypeORM schema synchronization; apply migrations before running them. The auth E2E suite mocks the notification client so tests do not require a live notification service.
+Integration and end-to-end tests use MySQL. Make sure your local database is running before you run the integration or e2e commands. E2E tests use the application migrations rather than TypeORM schema synchronization; apply migrations before running them. The E2E suites share the application's database connection without dropping schemas, and the auth E2E suite mocks the notification client so tests do not require a live notification service.
 
 ```bash
 # unit tests
