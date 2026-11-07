@@ -210,6 +210,8 @@ This project uses Docker Compose for a "Hot-Reload" environment. Key points:
 
 - Dev build: docker-compose targets the `base` stage so the service runs with a bind mount and watch mode for fast feedback.
 - Startup sequence: docker-compose runs a wait-for script to ensure the database is reachable, runs migrations (db-migrate up -e dev) and starts NestJS in watch mode.
+- The Auth API joins the external `healthcare-internal` Docker network for gateway and notification-service traffic. Start the frontend gateway (`make network` or `make start` in `healthcare-app`) before starting backend stacks. The API's host port is loopback-only for local debugging; browser clients should use the gateway.
+- Local Docker Compose sets `NOTIFICATION_SERVICE_URL` to `http://ms-notification-api:5502`; provide matching notification API and encryption keys through the Auth and Notification `.env` files. Do not expose the API-key-protected notification endpoints through the public gateway.
 - Environment: Provide environment variables via a local `.env` file (MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE, JWT_SECRET, GOOGLE_CLIENT_ID, NOTIFICATION_SERVICE_URL, NOTIFICATION_SERVICE_API_KEY, NOTIFICATION_PAYLOAD_ENCRYPTION_KEY). Never commit `.env`; production credentials must come from a secrets manager.
 - Commands:
   - Local dev: pnpm install; make start (uses docker-compose up -d)

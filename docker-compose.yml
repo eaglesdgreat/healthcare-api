@@ -1,9 +1,6 @@
 services:
   ms-auth-api:
     container_name: ms-auth-api
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.ms-auth-api.rule=PathPrefix(`/auth`)"
     user: root
     build:
       context: .
@@ -13,7 +10,7 @@ services:
       # The "Volume Trick": prevents local node_modules from overwriting container ones
       - /app/node_modules
     ports:
-      - 5501:5501
+      - 127.0.0.1:5501:5501
     env_file:
       - ./.env
     links:
@@ -28,6 +25,10 @@ services:
       # TypeScript's watch mode (used by nest start --watch) does NOT respect CHOKIDAR_USEPOLLING.
       # It uses its own watcher, controlled by TSC_WATCHFILE. Force polling for Windows Docker bind mounts.
       - TSC_WATCHFILE=DynamicPriorityPolling
+      - NOTIFICATION_SERVICE_URL=http://ms-notification-api:5502
+    networks:
+      - default
+      - healthcare-internal
     # Using your wait-for pattern to ensure DB is ready before Nest starts
     command: >
       sh -c "./shell/wait-for.sh ms-auth-db:3306 -- sh ./shell/start-dev.sh"
@@ -36,7 +37,7 @@ services:
     container_name: ms-auth-db
     image: mysql:8.0 # Recommended over 5.7 for modern NestJS/TypeORM features
     ports:
-      - 5306:3306
+      - 127.0.0.1:5306:3306
     expose:
       - 3306
     env_file:
@@ -47,3 +48,9 @@ services:
 
 volumes:
   ms-auth-db_vol:
+
+networks:
+  default: {}
+  healthcare-internal:
+    external: true
+    name: healthcare-internal
