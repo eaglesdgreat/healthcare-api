@@ -22,7 +22,8 @@
     "types": ["jest", "node"],
     "strict": true,
     "strictPropertyInitialization": false,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "ignoreDeprecations": "5.0"
   },
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }
